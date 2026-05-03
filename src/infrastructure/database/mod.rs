@@ -1,4 +1,7 @@
 //! Synapsis SQLite Database - Core Implementation
+//!
+//! Uses WAL mode with busy_timeout for concurrent multi-agent access.
+//! Write operations are queued and batched for ordered, non-saturating execution.
 
 use crate::core::uuid::Uuid;
 use crate::domain::ports::{SessionPort, StoragePort};
@@ -8,8 +11,13 @@ use hex;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 pub mod multi_agent;
+pub mod write_queue;
+
+use write_queue::WriteQueue;
 
 #[derive(Clone)]
 pub struct Database {
@@ -19,6 +27,11 @@ pub struct Database {
     db_path: PathBuf,
     #[allow(dead_code)]
     encryption_key: Option<Vec<u8>>,
+    write_queue: WriteQueue,
+    total_writes: Arc<AtomicU64>,
+    total_reads: Arc<AtomicU64>,
+    failed_writes: Arc<AtomicU64>,
+    last_write_at: Arc<Mutex<Instant>>,
 }
 
 unsafe impl Send for Database {}
@@ -65,12 +78,19 @@ impl Database {
         conn.execute_batch("PRAGMA synchronous = NORMAL").unwrap();
         conn.execute_batch("PRAGMA cache_size = -2000").unwrap();
         conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        conn.execute_batch("PRAGMA busy_timeout = 5000").unwrap();
+        conn.execute_batch("PRAGMA wal_autocheckpoint = 1000").unwrap();
 
         Self {
             conn: Arc::new(Mutex::new(conn)),
             _data_dir: data_dir.clone(),
             db_path,
             encryption_key,
+            write_queue: WriteQueue::new(),
+            total_writes: Arc::new(AtomicU64::new(0)),
+            total_reads: Arc::new(AtomicU64::new(0)),
+            failed_writes: Arc::new(AtomicU64::new(0)),
+            last_write_at: Arc::new(Mutex::new(Instant::now())),
         }
     }
 
@@ -104,17 +124,75 @@ impl Database {
         conn.execute_batch("PRAGMA synchronous = NORMAL").unwrap();
         conn.execute_batch("PRAGMA cache_size = -2000").unwrap();
         conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        conn.execute_batch("PRAGMA busy_timeout = 5000").unwrap();
+        conn.execute_batch("PRAGMA wal_autocheckpoint = 1000").unwrap();
 
         Self {
             conn: Arc::new(Mutex::new(conn)),
             _data_dir: data_dir,
             db_path,
             encryption_key,
+            write_queue: WriteQueue::new(),
+            total_writes: Arc::new(AtomicU64::new(0)),
+            total_reads: Arc::new(AtomicU64::new(0)),
+            failed_writes: Arc::new(AtomicU64::new(0)),
+            last_write_at: Arc::new(Mutex::new(Instant::now())),
         }
     }
 
     pub fn get_conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+        self.total_reads.fetch_add(1, Ordering::Relaxed);
         self.conn.lock().unwrap()
+    }
+
+    /// Execute operations atomically in a transaction
+    pub fn execute_transaction<F, T>(&self, ops: F) -> Result<T>
+    where
+        F: FnOnce(&Connection) -> Result<T>,
+    {
+        let conn = self.get_conn();
+        conn.execute_batch("BEGIN IMMEDIATE")?;
+        match ops(&conn) {
+            Ok(result) => {
+                conn.execute_batch("COMMIT")?;
+                self.total_writes.fetch_add(1, Ordering::Relaxed);
+                *self.last_write_at.lock().unwrap() = Instant::now();
+                Ok(result)
+            }
+            Err(e) => {
+                let _ = conn.execute_batch("ROLLBACK");
+                self.failed_writes.fetch_add(1, Ordering::Relaxed);
+                Err(e)
+            }
+        }
+    }
+
+    /// Flush pending write queue
+    pub fn flush_write_queue(&self) -> usize {
+        let conn = self.get_conn();
+        self.write_queue.flush(&conn)
+    }
+
+    /// DB health and load metrics
+    pub fn db_health(&self) -> serde_json::Value {
+        let pending = self.write_queue.pending_count();
+        let saturated = self.write_queue.is_saturated();
+        let writes = self.total_writes.load(Ordering::Relaxed);
+        let reads = self.total_reads.load(Ordering::Relaxed);
+        let failed = self.failed_writes.load(Ordering::Relaxed);
+        let last = self.last_write_at.lock().unwrap().elapsed().as_secs();
+
+        serde_json::json!({
+            "pending_writes": pending,
+            "saturated": saturated,
+            "total_writes": writes,
+            "total_reads": reads,
+            "failed_writes": failed,
+            "seconds_since_last_write": last,
+            "busy_timeout_ms": 5000,
+            "journal_mode": "WAL",
+            "status": if saturated { "throttled" } else if pending > 500 { "busy" } else { "healthy" }
+        })
     }
 
     pub fn migrate_from_json(&self) -> Result<()> {
