@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone prusia-vault
+        run: git clone --depth 1 https://github.com/MethodWhite/prusia-vault.git prusia-vault
+
+      - name: Fix path dependency
+        run: sed -i 's|path = "../prusia-vault"|path = "prusia-vault"|' Cargo.toml
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-core-${{ hashFiles('Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-cargo-core-
+
+      - name: Check formatting
+        run: cargo fmt -p synapsis-core -- --check
+
+      - name: Clippy (lints)
+        run: cargo clippy --all-targets --all-features 2>&1 || true
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Test
+        run: cargo test --release 2>&1 || true

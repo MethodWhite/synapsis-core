@@ -1,0 +1,103 @@
+[package]
+name = "synapsis-core"
+version = "0.2.0"
+edition = "2021"
+authors = ["MethodWhite <methodwhite@proton.me>"]
+description = "Core library for Synapsis - Persistent Memory Engine with PQC Security"
+license = "MIT"
+repository = "https://github.com/methodwhite/synapsis"
+
+[features]
+default = ["security", "pqc", "network", "monitoring"]
+security = ["dep:aes-gcm", "dep:argon2", "dep:sha2", "dep:sha3", "dep:hmac", "dep:chacha20poly1305", "dep:hmac-sha1", "dep:ctrlc", "dep:libc"]
+pqc = ["dep:pqcrypto-traits", "dep:pqcrypto-kyber", "dep:pqcrypto-dilithium"]
+full = ["security", "pqc", "network", "monitoring"]
+network = ["dep:mdns-sd"]
+monitoring = ["dep:sysinfo"]
+
+[dependencies]
+# Core
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Async
+tokio = { version = "1.38", features = ["full"] }
+
+# Database
+rusqlite = { version = "0.31", features = ["bundled", "blob", "serde_json"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Filesystem
+dirs = "5.0"
+
+# Base64
+base64 = "0.22"
+
+# UUID
+uuid = { version = "1.0", features = ["v4", "fast-rng"] }
+
+# Random
+rand = "0.8"
+getrandom = "0.2"
+
+# PQC (optional)
+pqcrypto-traits = { version = "0.3.5", optional = true }
+pqcrypto-kyber = { version = "0.8.1", optional = true }
+pqcrypto-dilithium = { version = "0.5.0", optional = true }
+
+# Crypto (security feature)
+aes-gcm = { version = "0.10", optional = true }
+argon2 = { version = "0.5", optional = true }
+sha2 = { version = "0.10", optional = true }
+sha3 = { version = "0.10", optional = true }
+hmac = { version = "0.12", optional = true }
+chacha20poly1305 = { version = "0.10", optional = true }
+hmac-sha1 = { version = "0.2", optional = true }
+
+# Plugin loading
+libloading = "0.8"
+
+# Logging
+log = "0.4"
+
+# Utilities
+lazy_static = "1.4"
+hex = "0.4"
+regex = "1"
+
+# Network (optional)
+mdns-sd = { version = "0.11", optional = true }
+
+# Monitoring (optional)
+sysinfo = { version = "0.38", optional = true }
+
+# Vault
+prusia-vault = { version = "0.1.0", path = "../prusia-vault", features = ["pqc"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "blocking"], default-features = false }
+
+# System
+ctrlc = { version = "3.4", optional = true }
+libc = { version = "0.2", optional = true }
+hostname = "0.4"
+
+[dev-dependencies]
+tempfile = "3.10"
+proptest = "1.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+incremental = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
