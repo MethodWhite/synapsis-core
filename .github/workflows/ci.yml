@@ -37,9 +37,9 @@ jobs:
         working-directory: synapsis-core
         run: cargo fmt -p synapsis-core -- --check
 
-      - name: Clippy lint
+      - name: Clippy
         working-directory: synapsis-core
-        run: cargo clippy --all-targets --all-features -- -D warnings 2>&1 || echo "::warning::Clippy (non-blocking)"
+        run: cargo clippy --all-targets
 
       - name: Build
         working-directory: synapsis-core
@@ -47,7 +47,7 @@ jobs:
 
       - name: Test
         working-directory: synapsis-core
-        run: cargo test --release --lib 2>&1 || echo "::warning::Tests (non-blocking)"
+        run: cargo test --release --lib
 
   build:
     name: Build (${{ matrix.name }})
