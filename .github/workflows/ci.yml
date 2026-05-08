@@ -14,17 +14,18 @@ jobs:
     name: Check & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           path: synapsis-core
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: MethodWhite/prusia-vault
           path: prusia-vault
 
       - uses: dtolnay/rust-toolchain@v1
         with:
+          toolchain: stable
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
@@ -37,7 +38,7 @@ jobs:
 
       - name: Clippy lint
         working-directory: synapsis-core
-        run: cargo clippy --all-targets --all-features -- -D warnings 2>&1 || echo "::warning::Clippy warnings (non-blocking)"
+        run: cargo clippy --all-targets --all-features -- -D warnings 2>&1 || echo "::warning::Clippy (non-blocking)"
 
       - name: Build
         working-directory: synapsis-core
@@ -45,7 +46,7 @@ jobs:
 
       - name: Test
         working-directory: synapsis-core
-        run: cargo test --release --lib 2>&1 || echo "::warning::Some tests failed (non-blocking)"
+        run: cargo test --release --lib 2>&1 || echo "::warning::Tests (non-blocking)"
 
   build:
     name: Build (${{ matrix.name }})
@@ -72,17 +73,18 @@ jobs:
             target: x86_64-pc-windows-msvc
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           path: synapsis-core
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: MethodWhite/prusia-vault
           path: prusia-vault
 
       - uses: dtolnay/rust-toolchain@v1
         with:
+          toolchain: stable
           targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
