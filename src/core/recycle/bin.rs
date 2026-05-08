@@ -115,7 +115,7 @@ impl RecycleBin {
         if bin_path.exists() {
             let data = std::fs::read_to_string(&bin_path)?;
             if let Ok(entries) = serde_json::from_str::<HashMap<String, RecycledEntry>>(&data) {
-                let mut entries_guard = self.entries.write().unwrap();
+                let mut entries_guard = self.entries.write().unwrap_or_else(|e| e.into_inner());
                 *entries_guard = entries;
 
                 self.rebuild_indexes()?;
@@ -137,23 +137,23 @@ impl RecycleBin {
         let entries = self.entries.read().unwrap();
 
         {
-            let mut by_keyword = self.by_keyword.write().unwrap();
+            let mut by_keyword = self.by_keyword.write().unwrap_or_else(|e| e.into_inner());
             *by_keyword = HashMap::new();
         }
         {
-            let mut by_category = self.by_category.write().unwrap();
+            let mut by_category = self.by_category.write().unwrap_or_else(|e| e.into_inner());
             *by_category = HashMap::new();
         }
         {
-            let mut by_task = self.by_task.write().unwrap();
+            let mut by_task = self.by_task.write().unwrap_or_else(|e| e.into_inner());
             *by_task = HashMap::new();
         }
         {
-            let mut by_agent = self.by_agent.write().unwrap();
+            let mut by_agent = self.by_agent.write().unwrap_or_else(|e| e.into_inner());
             *by_agent = HashMap::new();
         }
         {
-            let mut by_time = self.by_time.write().unwrap();
+            let mut by_time = self.by_time.write().unwrap_or_else(|e| e.into_inner());
             *by_time = BinaryHeap::new();
         }
 
@@ -170,7 +170,7 @@ impl RecycleBin {
         entry: &RecycledEntry,
     ) -> Result<(), std::io::Error> {
         {
-            let mut by_keyword = self.by_keyword.write().unwrap();
+            let mut by_keyword = self.by_keyword.write().unwrap_or_else(|e| e.into_inner());
             for keyword in &entry.keywords {
                 by_keyword
                     .entry(keyword.clone())
@@ -180,7 +180,7 @@ impl RecycleBin {
         }
 
         {
-            let mut by_category = self.by_category.write().unwrap();
+            let mut by_category = self.by_category.write().unwrap_or_else(|e| e.into_inner());
             by_category
                 .entry(entry.category)
                 .or_default()
@@ -188,7 +188,7 @@ impl RecycleBin {
         }
 
         if let Some(ref task_id) = entry.task_id {
-            let mut by_task = self.by_task.write().unwrap();
+            let mut by_task = self.by_task.write().unwrap_or_else(|e| e.into_inner());
             by_task
                 .entry(task_id.clone())
                 .or_default()
@@ -196,7 +196,7 @@ impl RecycleBin {
         }
 
         {
-            let mut by_agent = self.by_agent.write().unwrap();
+            let mut by_agent = self.by_agent.write().unwrap_or_else(|e| e.into_inner());
             by_agent
                 .entry(entry.agent_fingerprint.clone())
                 .or_default()
@@ -204,7 +204,7 @@ impl RecycleBin {
         }
 
         {
-            let mut by_time = self.by_time.write().unwrap();
+            let mut by_time = self.by_time.write().unwrap_or_else(|e| e.into_inner());
             by_time.push((entry.created_at, id.to_string()));
         }
 
@@ -217,7 +217,7 @@ impl RecycleBin {
 
     fn remove_from_indexes(&self, id: &str, entry: &RecycledEntry) {
         {
-            let mut by_keyword = self.by_keyword.write().unwrap();
+            let mut by_keyword = self.by_keyword.write().unwrap_or_else(|e| e.into_inner());
             for keyword in &entry.keywords {
                 if let Some(ids) = by_keyword.get_mut(keyword) {
                     ids.remove(id);
@@ -229,21 +229,21 @@ impl RecycleBin {
         }
 
         {
-            let mut by_category = self.by_category.write().unwrap();
+            let mut by_category = self.by_category.write().unwrap_or_else(|e| e.into_inner());
             if let Some(ids) = by_category.get_mut(&entry.category) {
                 ids.remove(id);
             }
         }
 
         if let Some(ref task_id) = entry.task_id {
-            let mut by_task = self.by_task.write().unwrap();
+            let mut by_task = self.by_task.write().unwrap_or_else(|e| e.into_inner());
             if let Some(ids) = by_task.get_mut(task_id) {
                 ids.remove(id);
             }
         }
 
         {
-            let mut by_agent = self.by_agent.write().unwrap();
+            let mut by_agent = self.by_agent.write().unwrap_or_else(|e| e.into_inner());
             if let Some(ids) = by_agent.get_mut(&entry.agent_fingerprint) {
                 ids.remove(id);
             }
@@ -290,7 +290,7 @@ impl RecycleBin {
         };
 
         {
-            let mut entries = self.entries.write().unwrap();
+            let mut entries = self.entries.write().unwrap_or_else(|e| e.into_inner());
             entries.insert(id.clone(), entry.clone());
         }
 
@@ -306,7 +306,7 @@ impl RecycleBin {
     }
 
     pub fn get(&self, id: &str) -> Option<RecycledEntry> {
-        let mut entries = self.entries.write().unwrap();
+        let mut entries = self.entries.write().unwrap_or_else(|e| e.into_inner());
 
         if let Some(entry) = entries.get_mut(id) {
             entry.access_count += 1;
@@ -419,7 +419,7 @@ impl RecycleBin {
 
     pub fn delete(&self, id: &str) -> bool {
         let entry = {
-            let mut entries = self.entries.write().unwrap();
+            let mut entries = self.entries.write().unwrap_or_else(|e| e.into_inner());
             entries.remove(id)
         };
 
@@ -529,27 +529,27 @@ impl RecycleBin {
             entries.len()
         };
 
-        let mut entries = self.entries.write().unwrap();
+        let mut entries = self.entries.write().unwrap_or_else(|e| e.into_inner());
         entries.clear();
 
         {
-            let mut by_keyword = self.by_keyword.write().unwrap();
+            let mut by_keyword = self.by_keyword.write().unwrap_or_else(|e| e.into_inner());
             by_keyword.clear();
         }
         {
-            let mut by_category = self.by_category.write().unwrap();
+            let mut by_category = self.by_category.write().unwrap_or_else(|e| e.into_inner());
             by_category.clear();
         }
         {
-            let mut by_task = self.by_task.write().unwrap();
+            let mut by_task = self.by_task.write().unwrap_or_else(|e| e.into_inner());
             by_task.clear();
         }
         {
-            let mut by_agent = self.by_agent.write().unwrap();
+            let mut by_agent = self.by_agent.write().unwrap_or_else(|e| e.into_inner());
             by_agent.clear();
         }
         {
-            let mut by_time = self.by_time.write().unwrap();
+            let mut by_time = self.by_time.write().unwrap_or_else(|e| e.into_inner());
             *by_time = BinaryHeap::new();
         }
 

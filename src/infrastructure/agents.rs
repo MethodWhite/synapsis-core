@@ -329,7 +329,7 @@ impl AgentRegistry {
         if agents_file.exists() {
             if let Ok(data) = std::fs::read_to_string(&agents_file) {
                 if let Ok(agents) = serde_json::from_str::<HashMap<AgentId, Agent>>(&data) {
-                    *self.agents.write().unwrap() = agents;
+                    *self.agents.write().unwrap_or_else(|e| e.into_inner()) = agents;
                 }
             }
         }
@@ -338,7 +338,7 @@ impl AgentRegistry {
         if tasks_file.exists() {
             if let Ok(data) = std::fs::read_to_string(&tasks_file) {
                 if let Ok(tasks) = serde_json::from_str::<Vec<Task>>(&data) {
-                    *self.tasks.write().unwrap() = tasks;
+                    *self.tasks.write().unwrap_or_else(|e| e.into_inner()) = tasks;
                 }
             }
         }
@@ -366,13 +366,13 @@ impl AgentRegistry {
 
     pub fn register(&self, agent: Agent) -> AgentId {
         let id = agent.id.clone();
-        self.agents.write().unwrap().insert(id.clone(), agent);
+        self.agents.write().unwrap_or_else(|e| e.into_inner()).insert(id.clone(), agent);
         let _ = self.save();
         id
     }
 
     pub fn unregister(&self, id: &AgentId) -> Option<Agent> {
-        let agent = self.agents.write().unwrap().remove(id);
+        let agent = self.agents.write().unwrap_or_else(|e| e.into_inner()).remove(id);
         let _ = self.save();
         agent
     }
@@ -400,7 +400,7 @@ impl AgentRegistry {
 
     pub fn update_state(&self, id: &AgentId, state: AgentState) -> bool {
         let updated = {
-            if let Some(agent) = self.agents.write().unwrap().get_mut(id) {
+            if let Some(agent) = self.agents.write().unwrap_or_else(|e| e.into_inner()).get_mut(id) {
                 agent.state = state;
                 if state == AgentState::Working {
                     agent.update_activity();
@@ -431,7 +431,7 @@ impl AgentRegistry {
 
         let msg = AgentMessage::new(from, to, content, msg_type);
         let id = msg.id.clone();
-        self.messages.write().unwrap().push(msg);
+        self.messages.write().unwrap_or_else(|e| e.into_inner()).push(msg);
         let _ = self.save();
         Some(id)
     }
@@ -456,13 +456,13 @@ impl AgentRegistry {
     ) -> TaskId {
         let task = Task::new(title, description, priority);
         let id = task.id.clone();
-        self.tasks.write().unwrap().push(task);
+        self.tasks.write().unwrap_or_else(|e| e.into_inner()).push(task);
         let _ = self.save();
         id
     }
 
     pub fn assign_task(&self, task_id: &TaskId, agent_id: &AgentId) -> bool {
-        let mut tasks = self.tasks.write().unwrap();
+        let mut tasks = self.tasks.write().unwrap_or_else(|e| e.into_inner());
         if let Some(task) = tasks.iter_mut().find(|t| t.id == *task_id) {
             task.assign(agent_id.clone());
             drop(tasks);
@@ -474,7 +474,7 @@ impl AgentRegistry {
     }
 
     pub fn complete_task(&self, task_id: &TaskId, result: String) -> bool {
-        let mut tasks = self.tasks.write().unwrap();
+        let mut tasks = self.tasks.write().unwrap_or_else(|e| e.into_inner());
         if let Some(task) = tasks.iter_mut().find(|t| t.id == *task_id) {
             task.complete(result);
             drop(tasks);

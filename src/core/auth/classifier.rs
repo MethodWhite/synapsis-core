@@ -252,7 +252,7 @@ impl AgentClassifier {
         if registry_path.exists() {
             let data = std::fs::read_to_string(&registry_path)?;
             if let Ok(registry) = serde_json::from_str::<HashMap<String, DeviceRecord>>(&data) {
-                let mut reg = self.device_registry.write().unwrap();
+                let mut reg = self.device_registry.write().unwrap_or_else(|e| e.into_inner());
                 *reg = registry;
             }
         }
@@ -267,7 +267,7 @@ impl AgentClassifier {
     }
 
     pub fn register_device(&self, record: DeviceRecord) {
-        let mut reg = self.device_registry.write().unwrap();
+        let mut reg = self.device_registry.write().unwrap_or_else(|e| e.into_inner());
         reg.insert(record.device_id.clone(), record);
     }
 
@@ -277,7 +277,7 @@ impl AgentClassifier {
     }
 
     pub fn revoke_device(&self, device_id: &str) -> bool {
-        let mut reg = self.device_registry.write().unwrap();
+        let mut reg = self.device_registry.write().unwrap_or_else(|e| e.into_inner());
         reg.remove(device_id).is_some()
     }
 

@@ -197,14 +197,14 @@ impl AutoIntegrate {
             ));
         }
 
-        let registry = self.registry.0.write().unwrap();
+        let registry = self.registry.0.write().unwrap_or_else(|e| e.into_inner());
         let config = registry.get_worker_config(tool);
 
         Ok(config)
     }
 
     pub fn register_with_task_queue(&self, config: &WorkerConfig) -> Result<()> {
-        let mut registry = self.registry.0.write().unwrap();
+        let mut registry = self.registry.0.write().unwrap_or_else(|e| e.into_inner());
         registry.register_worker(config.clone());
         Ok(())
     }

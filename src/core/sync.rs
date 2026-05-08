@@ -104,7 +104,7 @@ impl GitSyncEngine {
     }
     pub fn sync_memory(&self, memory: &Memory) -> Result<ManifestId> {
         let chunks = self.chunk_content(&memory.content);
-        let mut manifest = self.manifest.write().unwrap();
+        let mut manifest = self.manifest.write().unwrap_or_else(|e| e.into_inner());
         manifest.agent_id = memory.agent_id.clone();
         manifest.session_id = memory.session_id.clone();
         manifest.chunks.clear();

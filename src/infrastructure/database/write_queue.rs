@@ -35,7 +35,7 @@ impl WriteQueue {
         let mut queued = false;
         
         {
-            let mut queue = lock.lock().unwrap();
+            let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
             if queue.len() < self.max_queue_size {
                 queue.push_back(op);
                 queued = true;
@@ -51,7 +51,7 @@ impl WriteQueue {
     /// Execute pending writes as a batch in a transaction
     pub fn flush(&self, conn: &Connection) -> usize {
         let (lock, _cvar) = &*self.inner;
-        let mut queue = lock.lock().unwrap();
+        let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
         
         if queue.is_empty() {
             return 0;
@@ -80,12 +80,12 @@ impl WriteQueue {
 
     pub fn pending_count(&self) -> usize {
         let (lock, _) = &*self.inner;
-        lock.lock().unwrap().len()
+        lock.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     pub fn is_saturated(&self) -> bool {
         let (lock, _) = &*self.inner;
-        lock.lock().unwrap().len() >= self.max_queue_size
+        lock.lock().unwrap_or_else(|e| e.into_inner()).len() >= self.max_queue_size
     }
 }
 

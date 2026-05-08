@@ -155,7 +155,7 @@ impl SecureVault {
     pub fn initialize(&self) -> Result<(), VaultError> {
         let passphrase = std::env::var(PQC_PASSPHRASE_ENV)
             .map_err(|_| VaultError::PqcError("PQC passphrase not set".to_string()))?;
-        let mut vault = self.inner.write().unwrap();
+        let mut vault = self.inner.write().unwrap_or_else(|e| e.into_inner());
         vault.initialize(&passphrase)?;
         Ok(())
     }
@@ -168,7 +168,7 @@ impl SecureVault {
         // Serialize the session key (excluding session_id) to preserve metadata
         let key_data =
             serde_json::to_vec(key).map_err(|e| VaultError::StorageError(e.to_string()))?;
-        let vault = self.inner.write().unwrap();
+        let vault = self.inner.write().unwrap_or_else(|e| e.into_inner());
         vault.store_session_key(session_id, &key_data)?;
         // Compute fingerprint from encryption key (for compatibility)
         let fingerprint = base64_encode(&compute_hash(&key.encryption_key)[..16]);
@@ -190,7 +190,7 @@ impl SecureVault {
     }
 
     pub fn rotate_key(&self, session_id: &str) -> Result<Option<String>, VaultError> {
-        let vault = self.inner.write().unwrap();
+        let vault = self.inner.write().unwrap_or_else(|e| e.into_inner());
         match vault.rotate_session_key(session_id)? {
             Some(_) => {
                 let new_key = Self::generate_session_key()?;
@@ -206,7 +206,7 @@ impl SecureVault {
     }
 
     pub fn close_session(&self, session_id: &str) -> bool {
-        let mut vault = self.inner.write().unwrap();
+        let mut vault = self.inner.write().unwrap_or_else(|e| e.into_inner());
         let key = format!("session:{}", session_id);
         vault.delete(&key).is_ok()
     }
@@ -217,7 +217,7 @@ impl SecureVault {
     }
 
     pub fn store_secret(&self, key: &str, value: &str) -> Result<(), VaultError> {
-        let mut vault = self.inner.write().unwrap();
+        let mut vault = self.inner.write().unwrap_or_else(|e| e.into_inner());
         vault.store(key, value)?;
         Ok(())
     }

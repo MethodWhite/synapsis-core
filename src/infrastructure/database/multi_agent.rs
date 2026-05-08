@@ -43,13 +43,13 @@ impl MultiAgentDatabase {
         }
 
         let lock = {
-            let mut locks = self.agent_locks.write().unwrap();
+            let mut locks = self.agent_locks.write().unwrap_or_else(|e| e.into_inner());
             locks
                 .entry(agent_id.into())
                 .or_insert_with(|| Arc::new(RwLock::new(())))
                 .clone()
         };
-        let _guard = lock.write().unwrap();
+        let _guard = lock.write().unwrap_or_else(|e| e.into_inner());
         op(&self.db)
     }
 

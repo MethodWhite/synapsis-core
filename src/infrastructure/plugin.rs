@@ -122,7 +122,7 @@ impl PluginManager {
 
         let plugin = DummyPlugin { metadata };
 
-        let mut plugins = self.plugins.write().unwrap();
+        let mut plugins = self.plugins.write().unwrap_or_else(|e| e.into_inner());
         plugins.insert(plugin_id.clone(), Box::new(plugin));
 
         Ok(plugin_id)
@@ -130,7 +130,7 @@ impl PluginManager {
 
     /// Unload a plugin
     pub fn unload_plugin(&self, plugin_id: &str) -> Result<(), String> {
-        let mut plugins = self.plugins.write().unwrap();
+        let mut plugins = self.plugins.write().unwrap_or_else(|e| e.into_inner());
         if let Some(mut plugin) = plugins.remove(plugin_id) {
             plugin.cleanup().ok();
             Ok(())
@@ -153,7 +153,7 @@ impl PluginManager {
 
     /// Enable/disable a plugin
     pub fn set_plugin_enabled(&self, plugin_id: &str, _enabled: bool) -> Result<(), String> {
-        let mut plugins = self.plugins.write().unwrap();
+        let mut plugins = self.plugins.write().unwrap_or_else(|e| e.into_inner());
         if let Some(_plugin) = plugins.get_mut(plugin_id) {
             // In a real implementation, we'd update the plugin state
             // For now, we'll just return success
@@ -208,7 +208,7 @@ impl PluginManager {
             .unwrap()
             .as_secs() as i64;
 
-        let mut plugins = self.plugins.write().unwrap();
+        let mut plugins = self.plugins.write().unwrap_or_else(|e| e.into_inner());
         let ids: Vec<String> = plugins.keys().cloned().collect();
 
         for id in ids {

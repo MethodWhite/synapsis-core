@@ -27,7 +27,7 @@ impl RateLimiter {
     }
 
     pub fn check(&self, session_id: &str) -> Result<(), RateLimitError> {
-        let mut buckets = self.buckets.lock().unwrap();
+        let mut buckets = self.buckets.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
 
         let bucket = buckets
@@ -52,7 +52,7 @@ impl RateLimiter {
     }
 
     pub fn cleanup_old_buckets(&self, max_age: Duration) {
-        let mut buckets = self.buckets.lock().unwrap();
+        let mut buckets = self.buckets.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
         buckets.retain(|_, bucket| now.duration_since(bucket.last_refill) < max_age);
     }

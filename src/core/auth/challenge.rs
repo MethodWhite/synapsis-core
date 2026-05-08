@@ -73,7 +73,7 @@ impl ChallengeResponse {
         };
 
         {
-            let mut challenges = self.challenges.write().unwrap();
+            let mut challenges = self.challenges.write().unwrap_or_else(|e| e.into_inner());
             challenges.insert(id.clone(), challenge.clone());
         }
 
@@ -91,7 +91,7 @@ impl ChallengeResponse {
         response: &str,
         verifier: &dyn ResponseVerifier,
     ) -> Result<bool, ChallengeError> {
-        let mut challenges = self.challenges.write().unwrap();
+        let mut challenges = self.challenges.write().unwrap_or_else(|e| e.into_inner());
 
         let challenge = challenges
             .get_mut(challenge_id)
@@ -122,7 +122,7 @@ impl ChallengeResponse {
         let result = self.verify_response(challenge_id, response, verifier)?;
 
         if result {
-            let mut challenges = self.challenges.write().unwrap();
+            let mut challenges = self.challenges.write().unwrap_or_else(|e| e.into_inner());
             challenges.remove(challenge_id);
         }
 
@@ -139,7 +139,7 @@ impl ChallengeResponse {
 
     pub fn cleanup_expired(&self) -> usize {
         let _now = current_timestamp();
-        let mut challenges = self.challenges.write().unwrap();
+        let mut challenges = self.challenges.write().unwrap_or_else(|e| e.into_inner());
         let initial_len = challenges.len();
 
         challenges.retain(|_, c| !c.is_expired());
@@ -148,12 +148,12 @@ impl ChallengeResponse {
     }
 
     pub fn revoke_challenge(&self, challenge_id: &str) -> bool {
-        let mut challenges = self.challenges.write().unwrap();
+        let mut challenges = self.challenges.write().unwrap_or_else(|e| e.into_inner());
         challenges.remove(challenge_id).is_some()
     }
 
     pub fn revoke_all_for_agent(&self, agent_type: &str) -> usize {
-        let mut challenges = self.challenges.write().unwrap();
+        let mut challenges = self.challenges.write().unwrap_or_else(|e| e.into_inner());
         let initial_len = challenges.len();
 
         challenges.retain(|_, c| c.agent_type != agent_type);

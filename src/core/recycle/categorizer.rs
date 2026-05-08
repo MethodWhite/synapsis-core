@@ -207,7 +207,7 @@ impl SmartCategorizer {
     }
 
     pub fn add_rule(&self, rule: CategorizationRule) {
-        let mut rules = self.custom_rules.write().unwrap();
+        let mut rules = self.custom_rules.write().unwrap_or_else(|e| e.into_inner());
         rules.push(rule);
     }
 
@@ -224,7 +224,7 @@ impl SmartCategorizer {
     }
 
     pub fn remove_rule(&self, description: &str) -> bool {
-        let mut rules = self.custom_rules.write().unwrap();
+        let mut rules = self.custom_rules.write().unwrap_or_else(|e| e.into_inner());
         let len_before = rules.len();
         rules.retain(|r| r.description != description);
         rules.len() != len_before

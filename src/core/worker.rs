@@ -164,15 +164,15 @@ impl WorkerRegistry {
 
     pub fn register(&self, worker: Arc<dyn WorkerAgent>) {
         let id = worker.id().to_string();
-        self.workers.lock().unwrap().insert(id, worker);
+        self.workers.lock().unwrap_or_else(|e| e.into_inner()).insert(id, worker);
     }
 
     pub fn unregister(&self, id: &str) {
-        self.workers.lock().unwrap().remove(id);
+        self.workers.lock().unwrap_or_else(|e| e.into_inner()).remove(id);
     }
 
     pub fn get(&self, id: &str) -> Option<Arc<dyn WorkerAgent>> {
-        self.workers.lock().unwrap().get(id).cloned()
+        self.workers.lock().unwrap_or_else(|e| e.into_inner()).get(id).cloned()
     }
 
     pub fn find_by_skill(&self, skill: &str) -> Vec<Arc<dyn WorkerAgent>> {
@@ -186,7 +186,7 @@ impl WorkerRegistry {
     }
 
     pub fn list(&self) -> Vec<String> {
-        self.workers.lock().unwrap().keys().cloned().collect()
+        self.workers.lock().unwrap_or_else(|e| e.into_inner()).keys().cloned().collect()
     }
 }
 
@@ -336,7 +336,7 @@ impl WorkerAgent for ShellWorker {
         }
 
         let start = Instant::now();
-        *self.last_heartbeat.lock().unwrap() = Instant::now();
+        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
 
         let command = task
             .payload
@@ -365,7 +365,7 @@ impl WorkerAgent for ShellWorker {
     }
 
     fn heartbeat(&self) -> bool {
-        *self.last_heartbeat.lock().unwrap() = Instant::now();
+        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
         true
     }
 }
@@ -400,12 +400,12 @@ impl FileWorker {
     }
 
     pub fn with_allowed_dirs(self, dirs: Vec<PathBuf>) -> Self {
-        *self.allowed_dirs.lock().unwrap() = dirs;
+        *self.allowed_dirs.lock().unwrap_or_else(|e| e.into_inner()) = dirs;
         self
     }
 
     fn is_path_allowed(&self, path: &Path) -> bool {
-        let allowed = self.allowed_dirs.lock().unwrap();
+        let allowed = self.allowed_dirs.lock().unwrap_or_else(|e| e.into_inner());
         if allowed.is_empty() {
             return true;
         }
@@ -427,7 +427,7 @@ impl WorkerAgent for FileWorker {
     }
 
     fn execute_task(&self, task: &Task) -> Result<TaskResult, TaskError> {
-        *self.last_heartbeat.lock().unwrap() = Instant::now();
+        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
         let start = Instant::now();
 
         match task.task_type {
@@ -487,7 +487,7 @@ impl WorkerAgent for FileWorker {
     }
 
     fn heartbeat(&self) -> bool {
-        *self.last_heartbeat.lock().unwrap() = Instant::now();
+        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
         true
     }
 }
@@ -606,7 +606,7 @@ impl WorkerAgent for CodeWorker {
     }
 
     fn execute_task(&self, task: &Task) -> Result<TaskResult, TaskError> {
-        *self.last_heartbeat.lock().unwrap() = Instant::now();
+        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
         let start = Instant::now();
 
         match task.task_type {
@@ -654,7 +654,7 @@ impl WorkerAgent for CodeWorker {
     }
 
     fn heartbeat(&self) -> bool {
-        *self.last_heartbeat.lock().unwrap() = Instant::now();
+        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
         true
     }
 }
@@ -750,7 +750,7 @@ impl WorkerAgent for SearchWorker {
     }
 
     fn execute_task(&self, task: &Task) -> Result<TaskResult, TaskError> {
-        *self.last_heartbeat.lock().unwrap() = Instant::now();
+        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
         let start = Instant::now();
 
         let search_type = task
@@ -814,7 +814,7 @@ impl WorkerAgent for SearchWorker {
     }
 
     fn heartbeat(&self) -> bool {
-        *self.last_heartbeat.lock().unwrap() = Instant::now();
+        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
         true
     }
 }
@@ -893,7 +893,7 @@ impl WorkerAgent for GitWorker {
             ));
         }
 
-        *self.last_heartbeat.lock().unwrap() = Instant::now();
+        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
         let start = Instant::now();
 
         let command = task
@@ -927,7 +927,7 @@ impl WorkerAgent for GitWorker {
     }
 
     fn heartbeat(&self) -> bool {
-        *self.last_heartbeat.lock().unwrap() = Instant::now();
+        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
         true
     }
 }
@@ -1001,7 +1001,7 @@ impl ExternalAgentConnector for OpenCodeConnector {
     }
 
     fn is_running(&self) -> bool {
-        *self.running.lock().unwrap()
+        *self.running.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     fn spawn(&mut self) -> Result<(), TaskError> {
@@ -1026,7 +1026,7 @@ impl ExternalAgentConnector for OpenCodeConnector {
         })?;
 
         self.process = Some(child);
-        *self.running.lock().unwrap() = true;
+        *self.running.lock().unwrap_or_else(|e| e.into_inner()) = true;
         Ok(())
     }
 
@@ -1067,7 +1067,7 @@ impl ExternalAgentConnector for OpenCodeConnector {
         if let Some(ref mut child) = self.process {
             if let Ok(Some(status)) = child.try_wait() {
                 if status.success() {
-                    *self.running.lock().unwrap() = false;
+                    *self.running.lock().unwrap_or_else(|e| e.into_inner()) = false;
                 }
             }
         }
@@ -1083,7 +1083,7 @@ impl ExternalAgentConnector for OpenCodeConnector {
         }
 
         self.process = None;
-        *self.running.lock().unwrap() = false;
+        *self.running.lock().unwrap_or_else(|e| e.into_inner()) = false;
         Ok(())
     }
 }
@@ -1125,7 +1125,7 @@ impl ExternalAgentConnector for QwenConnector {
     }
 
     fn is_running(&self) -> bool {
-        *self.running.lock().unwrap()
+        *self.running.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     fn spawn(&mut self) -> Result<(), TaskError> {
@@ -1150,7 +1150,7 @@ impl ExternalAgentConnector for QwenConnector {
         })?;
 
         self.process = Some(child);
-        *self.running.lock().unwrap() = true;
+        *self.running.lock().unwrap_or_else(|e| e.into_inner()) = true;
         Ok(())
     }
 
@@ -1187,7 +1187,7 @@ impl ExternalAgentConnector for QwenConnector {
         if let Some(ref mut child) = self.process {
             if let Ok(Some(status)) = child.try_wait() {
                 if status.success() {
-                    *self.running.lock().unwrap() = false;
+                    *self.running.lock().unwrap_or_else(|e| e.into_inner()) = false;
                 }
             }
         }
@@ -1203,7 +1203,7 @@ impl ExternalAgentConnector for QwenConnector {
         }
 
         self.process = None;
-        *self.running.lock().unwrap() = false;
+        *self.running.lock().unwrap_or_else(|e| e.into_inner()) = false;
         Ok(())
     }
 }
@@ -1245,7 +1245,7 @@ impl ExternalAgentConnector for ClaudeConnector {
     }
 
     fn is_running(&self) -> bool {
-        *self.running.lock().unwrap()
+        *self.running.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     fn spawn(&mut self) -> Result<(), TaskError> {
@@ -1270,7 +1270,7 @@ impl ExternalAgentConnector for ClaudeConnector {
         })?;
 
         self.process = Some(child);
-        *self.running.lock().unwrap() = true;
+        *self.running.lock().unwrap_or_else(|e| e.into_inner()) = true;
         Ok(())
     }
 
@@ -1311,7 +1311,7 @@ impl ExternalAgentConnector for ClaudeConnector {
         if let Some(ref mut child) = self.process {
             if let Ok(Some(status)) = child.try_wait() {
                 if status.success() {
-                    *self.running.lock().unwrap() = false;
+                    *self.running.lock().unwrap_or_else(|e| e.into_inner()) = false;
                 }
             }
         }
@@ -1327,7 +1327,7 @@ impl ExternalAgentConnector for ClaudeConnector {
         }
 
         self.process = None;
-        *self.running.lock().unwrap() = false;
+        *self.running.lock().unwrap_or_else(|e| e.into_inner()) = false;
         Ok(())
     }
 }

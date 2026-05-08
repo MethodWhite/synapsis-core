@@ -109,21 +109,21 @@ impl ResourceManager {
     /// Create with custom global limits
     pub fn with_limits(global_limits: GlobalLimits) -> Self {
         let rm = Self::new();
-        *rm.global_limits.lock().unwrap() = global_limits;
+        *rm.global_limits.lock().unwrap_or_else(|e| e.into_inner()) = global_limits;
         rm
     }
 
     /// Update system resource information
     pub fn refresh(&self) {
-        let mut system = self.system.lock().unwrap();
+        let mut system = self.system.lock().unwrap_or_else(|e| e.into_inner());
         system.refresh_all();
-        *self.last_update.lock().unwrap() = Instant::now();
+        *self.last_update.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
     }
 
     /// Get current system resource statistics
     pub fn get_system_stats(&self) -> ResourceStats {
         self.refresh();
-        let system = self.system.lock().unwrap();
+        let system = self.system.lock().unwrap_or_else(|e| e.into_inner());
 
         // Get load average (if available)
         let load_avg = System::load_average();
@@ -148,7 +148,7 @@ impl ResourceManager {
 
     /// Register an agent with PID for monitoring
     pub fn register_agent(&self, agent_id: &str, pid: Option<u32>) {
-        let mut stats = self.agent_stats.lock().unwrap();
+        let mut stats = self.agent_stats.lock().unwrap_or_else(|e| e.into_inner());
         stats.insert(
             agent_id.to_string(),
             AgentStats {
@@ -163,7 +163,7 @@ impl ResourceManager {
 
     /// Update agent task count
     pub fn update_agent_task_count(&self, agent_id: &str, task_count: usize) {
-        let mut stats = self.agent_stats.lock().unwrap();
+        let mut stats = self.agent_stats.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(agent_stats) = stats.get_mut(agent_id) {
             agent_stats.task_count = task_count;
             agent_stats.last_seen = Instant::now();
@@ -181,7 +181,7 @@ impl ResourceManager {
     /// Check if system can accept more tasks (throttling decision)
     pub fn can_accept_task(&self, agent_type: &str) -> bool {
         let stats = self.get_system_stats();
-        let global_limits = self.global_limits.lock().unwrap();
+        let global_limits = self.global_limits.lock().unwrap_or_else(|e| e.into_inner());
 
         // Check global limits
         if stats.cpu_usage_percent > global_limits.max_cpu_percent {
@@ -197,8 +197,8 @@ impl ResourceManager {
         }
 
         // Check agent-specific limits
-        let agent_stats = self.agent_stats.lock().unwrap();
-        let agent_limits = self.agent_limits.lock().unwrap();
+        let agent_stats = self.agent_stats.lock().unwrap_or_else(|e| e.into_inner());
+        let agent_limits = self.agent_limits.lock().unwrap_or_else(|e| e.into_inner());
 
         if let Some(limits) = agent_limits.get(agent_type) {
             if let Some(stats) = agent_stats.values().find(|s| {
@@ -217,7 +217,7 @@ impl ResourceManager {
     /// Get recommended delay before next task (in milliseconds)
     pub fn get_throttle_delay_ms(&self) -> u64 {
         let stats = self.get_system_stats();
-        let global_limits = self.global_limits.lock().unwrap();
+        let global_limits = self.global_limits.lock().unwrap_or_else(|e| e.into_inner());
 
         if !global_limits.enable_adaptive_throttling {
             return 0;
@@ -245,7 +245,7 @@ impl ResourceManager {
     /// Get agent-specific recommendations
     pub fn get_agent_recommendations(&self, agent_id: &str) -> AgentRecommendations {
         let _stats = self.get_system_stats();
-        let agent_stats = self.agent_stats.lock().unwrap();
+        let agent_stats = self.agent_stats.lock().unwrap_or_else(|e| e.into_inner());
 
         if let Some(agent_stat) = agent_stats.get(agent_id) {
             let current_tasks = agent_stat.task_count;
@@ -270,8 +270,8 @@ impl ResourceManager {
 
     fn calculate_recommended_tasks(&self, agent_id: &str) -> usize {
         let stats = self.get_system_stats();
-        let _agent_stats = self.agent_stats.lock().unwrap();
-        let agent_limits = self.agent_limits.lock().unwrap();
+        let _agent_stats = self.agent_stats.lock().unwrap_or_else(|e| e.into_inner());
+        let agent_limits = self.agent_limits.lock().unwrap_or_else(|e| e.into_inner());
 
         let base_limit = agent_limits
             .iter()
@@ -280,7 +280,7 @@ impl ResourceManager {
             .unwrap_or(2);
 
         // Reduce limit under high load
-        let global_limits = self.global_limits.lock().unwrap();
+        let global_limits = self.global_limits.lock().unwrap_or_else(|e| e.into_inner());
         let load_factor = stats.load_average_1min / global_limits.high_load_threshold;
         let cpu_factor = stats.cpu_usage_percent / 100.0;
 
@@ -292,7 +292,7 @@ impl ResourceManager {
 
     /// Clean up old agent stats
     pub fn cleanup_old_stats(&self, max_age: Duration) {
-        let mut stats = self.agent_stats.lock().unwrap();
+        let mut stats = self.agent_stats.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
         stats.retain(|_, agent_stats| now.duration_since(agent_stats.last_seen) < max_age);
     }
@@ -301,8 +301,8 @@ impl ResourceManager {
     pub fn load_limits(&self, path: &std::path::Path) -> std::io::Result<()> {
         if let Ok(data) = std::fs::read_to_string(path) {
             if let Ok(config) = serde_json::from_str::<ResourceLimitsConfig>(&data) {
-                let mut agent_limits = self.agent_limits.lock().unwrap();
-                let mut global_limits = self.global_limits.lock().unwrap();
+                let mut agent_limits = self.agent_limits.lock().unwrap_or_else(|e| e.into_inner());
+                let mut global_limits = self.global_limits.lock().unwrap_or_else(|e| e.into_inner());
                 *agent_limits = config.agent_limits;
                 *global_limits = config.global;
             }
@@ -312,8 +312,8 @@ impl ResourceManager {
 
     /// Save limits to JSON file
     pub fn save_limits(&self, path: &std::path::Path) -> std::io::Result<()> {
-        let agent_limits = self.agent_limits.lock().unwrap().clone();
-        let global_limits = self.global_limits.lock().unwrap().clone();
+        let agent_limits = self.agent_limits.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let global_limits = self.global_limits.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let config = ResourceLimitsConfig {
             global: global_limits,
             agent_limits,
@@ -327,18 +327,18 @@ impl ResourceManager {
     /// Get current system statistics as JSON
     pub fn get_stats_json(&self) -> serde_json::Value {
         let stats = self.get_system_stats();
-        let global_limits = self.global_limits.lock().unwrap();
+        let global_limits = self.global_limits.lock().unwrap_or_else(|e| e.into_inner());
         serde_json::json!({
             "system": stats,
             "global_limits": *global_limits,
-            "agent_limits_count": self.agent_limits.lock().unwrap().len(),
-            "agent_stats_count": self.agent_stats.lock().unwrap().len(),
+            "agent_limits_count": self.agent_limits.lock().unwrap_or_else(|e| e.into_inner()).len(),
+            "agent_stats_count": self.agent_stats.lock().unwrap_or_else(|e| e.into_inner()).len(),
         })
     }
 
     /// Get recommendations for all registered agents
     pub fn get_all_recommendations(&self) -> HashMap<String, AgentRecommendations> {
-        let agent_stats = self.agent_stats.lock().unwrap();
+        let agent_stats = self.agent_stats.lock().unwrap_or_else(|e| e.into_inner());
         agent_stats
             .keys()
             .map(|agent_id| (agent_id.clone(), self.get_agent_recommendations(agent_id)))

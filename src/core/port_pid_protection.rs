@@ -210,7 +210,7 @@ impl ServerProtection {
         self.is_running.store(true, Ordering::SeqCst);
 
         // Initial listener
-        let port = *self.current_port.lock().unwrap();
+        let port = *self.current_port.lock().unwrap_or_else(|e| e.into_inner());
         self.start_listener(port)?;
 
         // Start protection threads
@@ -227,7 +227,7 @@ impl ServerProtection {
 
         println!("[PROTECTION] Listening on port {}", port);
 
-        let mut listener_guard = self.listener.lock().unwrap();
+        let mut listener_guard = self.listener.lock().unwrap_or_else(|e| e.into_inner());
         *listener_guard = Some(listener);
 
         Ok(())
@@ -278,7 +278,7 @@ impl ServerProtection {
                 thread::sleep(Duration::from_secs(30));
 
                 // Check for suspicious connection patterns
-                let connections_guard = connections.lock().unwrap();
+                let connections_guard = connections.lock().unwrap_or_else(|e| e.into_inner());
                 if connections_guard.len() as u32 > config.max_connections_per_port {
                     println!(
                         "[PROTECTION] High connection count: {}",
@@ -312,16 +312,16 @@ impl ServerProtection {
 
         println!(
             "[PROTECTION] Port change: {} -> {}",
-            *current_port.lock().unwrap(),
+            *current_port.lock().unwrap_or_else(|e| e.into_inner()),
             new_port
         );
 
         // 3. Update listener
-        let mut listener_guard = listener.lock().unwrap();
+        let mut listener_guard = listener.lock().unwrap_or_else(|e| e.into_inner());
         *listener_guard = Some(new_listener);
 
         // 4. Update current port
-        let mut port_guard = current_port.lock().unwrap();
+        let mut port_guard = current_port.lock().unwrap_or_else(|e| e.into_inner());
         *port_guard = new_port;
 
         // 5. Notify existing connections (optional - can migrate or keep)
@@ -386,7 +386,7 @@ impl ServerProtection {
         connections: &Arc<Mutex<HashMap<u64, TcpStream>>>,
         new_port: u16,
     ) {
-        let mut connections_guard = connections.lock().unwrap();
+        let mut connections_guard = connections.lock().unwrap_or_else(|e| e.into_inner());
 
         for (_id, stream) in connections_guard.iter_mut() {
             // Send notification to client about port change
@@ -408,7 +408,7 @@ impl ServerProtection {
     where
         F: Fn(TcpStream) + Send + 'static,
     {
-        let listener_guard = self.listener.lock().unwrap();
+        let listener_guard = self.listener.lock().unwrap_or_else(|e| e.into_inner());
 
         if let Some(ref listener) = *listener_guard {
             // Try to accept connections (non-blocking)
@@ -417,11 +417,11 @@ impl ServerProtection {
                     println!("[PROTECTION] New connection from {}", addr);
 
                     // Register connection
-                    let mut id_guard = self.next_connection_id.lock().unwrap();
+                    let mut id_guard = self.next_connection_id.lock().unwrap_or_else(|e| e.into_inner());
                     let connection_id = *id_guard;
                     *id_guard += 1;
 
-                    let mut connections_guard = self.connections.lock().unwrap();
+                    let mut connections_guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
                     connections_guard.insert(connection_id, stream.try_clone()?);
 
                     // Spawn handler thread
@@ -461,16 +461,16 @@ impl ServerProtection {
 
         println!(
             "[PROTECTION] Manual port change: {} -> {}",
-            *current_port.lock().unwrap(),
+            *current_port.lock().unwrap_or_else(|e| e.into_inner()),
             new_port
         );
 
         // Update listener
-        let mut listener_guard = listener.lock().unwrap();
+        let mut listener_guard = listener.lock().unwrap_or_else(|e| e.into_inner());
         *listener_guard = Some(new_listener);
 
         // Update current port
-        let mut port_guard = current_port.lock().unwrap();
+        let mut port_guard = current_port.lock().unwrap_or_else(|e| e.into_inner());
         let _old_port = *port_guard;
         *port_guard = new_port;
 
@@ -479,7 +479,7 @@ impl ServerProtection {
 
     /// Get current port
     pub fn current_port(&self) -> u16 {
-        *self.current_port.lock().unwrap()
+        *self.current_port.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Stop protection and cleanup
@@ -487,7 +487,7 @@ impl ServerProtection {
         self.is_running.store(false, Ordering::SeqCst);
 
         // Close all connections
-        let mut connections_guard = self.connections.lock().unwrap();
+        let mut connections_guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
         connections_guard.clear();
 
         println!("[PROTECTION] Stopped");
@@ -566,7 +566,7 @@ impl ProcessIdentityManager {
         // For now, we simulate PID protection by changing how the process
         // appears in listings (process name, session ID, etc.)
 
-        let mut identity_guard = self.current_identity.lock().unwrap();
+        let mut identity_guard = self.current_identity.lock().unwrap_or_else(|e| e.into_inner());
         identity_guard.protection_level = ProtectionLevel::Advanced;
 
         // Generate unique process name to avoid conflicts
@@ -617,7 +617,7 @@ impl ProcessIdentityManager {
 
     /// Rotate session ID (simulates PID change)
     pub fn rotate_session(&self) -> io::Result<String> {
-        let mut identity_guard = self.current_identity.lock().unwrap();
+        let mut identity_guard = self.current_identity.lock().unwrap_or_else(|e| e.into_inner());
 
         let new_session_id = Self::generate_session_id();
         identity_guard.session_id = new_session_id.clone();
@@ -642,14 +642,14 @@ impl ProcessIdentityManager {
 
     /// Get current identity
     pub fn get_identity(&self) -> ProcessIdentity {
-        self.current_identity.lock().unwrap().clone()
+        self.current_identity.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Disable protection
     pub fn disable_protection(&self) {
         self.protection_enabled.store(false, Ordering::SeqCst);
 
-        let mut identity_guard = self.current_identity.lock().unwrap();
+        let mut identity_guard = self.current_identity.lock().unwrap_or_else(|e| e.into_inner());
         identity_guard.protection_level = ProtectionLevel::None;
 
         // Restore original process name

@@ -57,7 +57,7 @@ impl NetworkDiscovery {
                         .next()
                         .map(|a| a.to_string())
                         .unwrap_or_default();
-                    let mut nodes = nodes.lock().unwrap();
+                    let mut nodes = nodes.lock().unwrap_or_else(|e| e.into_inner());
                     println!("[Mesh] Discovered Node: {} @ {}", node_id, ip);
                     nodes.insert(node_id.to_string(), ip);
                 }
@@ -68,6 +68,6 @@ impl NetworkDiscovery {
     }
 
     pub fn list_nodes(&self) -> HashMap<String, String> {
-        self.found_nodes.lock().unwrap().clone()
+        self.found_nodes.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }

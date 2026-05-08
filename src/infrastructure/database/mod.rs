@@ -142,7 +142,7 @@ impl Database {
 
     pub fn get_conn(&self) -> std::sync::MutexGuard<'_, Connection> {
         self.total_reads.fetch_add(1, Ordering::Relaxed);
-        self.conn.lock().unwrap()
+        self.conn.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Execute operations atomically in a transaction
@@ -156,7 +156,7 @@ impl Database {
             Ok(result) => {
                 conn.execute_batch("COMMIT")?;
                 self.total_writes.fetch_add(1, Ordering::Relaxed);
-                *self.last_write_at.lock().unwrap() = Instant::now();
+                *self.last_write_at.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
                 Ok(result)
             }
             Err(e) => {
@@ -180,7 +180,7 @@ impl Database {
         let writes = self.total_writes.load(Ordering::Relaxed);
         let reads = self.total_reads.load(Ordering::Relaxed);
         let failed = self.failed_writes.load(Ordering::Relaxed);
-        let last = self.last_write_at.lock().unwrap().elapsed().as_secs();
+        let last = self.last_write_at.lock().unwrap_or_else(|e| e.into_inner()).elapsed().as_secs();
 
         serde_json::json!({
             "pending_writes": pending,
@@ -1683,7 +1683,7 @@ impl Database {
         content: &str,
         priority: i32,
     ) -> Result<i64> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let now = chrono::Utc::now().timestamp();
         conn.execute(
             "INSERT INTO events (event_type, from_agent, project, channel, content, priority, created_at)
@@ -1703,7 +1703,7 @@ impl Database {
         content: &str,
         priority: i32,
     ) -> Result<i64> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let now = chrono::Utc::now().timestamp();
         conn.execute(
             "INSERT INTO events (event_type, from_agent, to_agent, project, channel, content, priority, created_at)
@@ -1720,7 +1720,7 @@ impl Database {
         project: Option<&str>,
         limit: i32,
     ) -> Result<Vec<serde_json::Value>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let effective_limit = if limit <= 0 || limit > 1000 {
             100
         } else {
@@ -1838,7 +1838,7 @@ impl Database {
     }
 
     pub fn get_pending_messages(&self, session_id: &str) -> Result<Vec<serde_json::Value>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
             "SELECT id, event_type, from_agent, to_agent, project, channel, content, priority, created_at
              FROM events WHERE to_agent = ? AND read_status = 0 ORDER BY created_at ASC LIMIT 100"
@@ -1864,7 +1864,7 @@ impl Database {
     }
 
     pub fn acknowledge_event(&self, event_id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute(
             "UPDATE events SET read_status = 1 WHERE id = ?",
             params![event_id],
@@ -1873,7 +1873,7 @@ impl Database {
     }
 
     pub fn cleanup_expired_events(&self) -> Result<usize> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let now = chrono::Utc::now().timestamp();
         let deleted = conn.execute(
             "DELETE FROM events WHERE expires_at IS NOT NULL AND expires_at < ?",

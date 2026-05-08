@@ -155,8 +155,8 @@ impl Orchestrator {
     }
 
     pub fn save(&self, data_dir: &Path) {
-        let agents = self.agents.lock().unwrap();
-        let tasks = self.tasks.lock().unwrap();
+        let agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
+        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
 
         if let Ok(data) = serde_json::to_string_pretty(&*agents) {
             let _ = std::fs::write(data_dir.join("orch_agents.json"), data);
@@ -169,8 +169,8 @@ impl Orchestrator {
     fn load(&self, data_dir: &Path) {
         if let Ok(data) = std::fs::read_to_string(data_dir.join("orch_agents.json")) {
             if let Ok(agents) = serde_json::from_str::<HashMap<String, Agent>>(&data) {
-                let mut a = self.agents.lock().unwrap();
-                let mut index = self.skills_index.lock().unwrap();
+                let mut a = self.agents.lock().unwrap_or_else(|e| e.into_inner());
+                let mut index = self.skills_index.lock().unwrap_or_else(|e| e.into_inner());
                 for (id, agent) in agents.iter() {
                     for skill in &agent.skills {
                         index.entry(skill.clone()).or_default().push(id.clone());
@@ -181,7 +181,7 @@ impl Orchestrator {
         }
         if let Ok(data) = std::fs::read_to_string(data_dir.join("orch_tasks.json")) {
             if let Ok(tasks) = serde_json::from_str::<HashMap<String, Task>>(&data) {
-                let mut t = self.tasks.lock().unwrap();
+                let mut t = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
                 *t = tasks;
             }
         }
@@ -203,13 +203,13 @@ impl Orchestrator {
             last_heartbeat: now,
         };
 
-        self.agents.lock().unwrap().insert(id.clone(), agent);
+        self.agents.lock().unwrap_or_else(|e| e.into_inner()).insert(id.clone(), agent);
 
         // Register agent with resource manager (PID unknown initially)
         self.resource_manager.register_agent(&id, None);
 
         for skill in &skills {
-            let mut index = self.skills_index.lock().unwrap();
+            let mut index = self.skills_index.lock().unwrap_or_else(|e| e.into_inner());
             index.entry(skill.clone()).or_default().push(id.clone());
         }
 
@@ -244,7 +244,7 @@ impl Orchestrator {
             .insert(agent_id.to_string(), agent);
 
         for skill in &skills {
-            let mut index = self.skills_index.lock().unwrap();
+            let mut index = self.skills_index.lock().unwrap_or_else(|e| e.into_inner());
             index
                 .entry(skill.clone())
                 .or_default()
@@ -260,9 +260,9 @@ impl Orchestrator {
     }
 
     pub fn unregister_agent(&self, agent_id: &str) {
-        let mut agents = self.agents.lock().unwrap();
+        let mut agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(agent) = agents.remove(agent_id) {
-            let mut index = self.skills_index.lock().unwrap();
+            let mut index = self.skills_index.lock().unwrap_or_else(|e| e.into_inner());
             for skill in &agent.skills {
                 if let Some(agent_list) = index.get_mut(skill) {
                     agent_list.retain(|a| a != agent_id);
@@ -273,14 +273,14 @@ impl Orchestrator {
 
     pub fn heartbeat(&self, agent_id: &str, status: Option<AgentStatus>, task: Option<&str>) {
         let was_idle = {
-            let agents = self.agents.lock().unwrap();
+            let agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
             agents
                 .get(agent_id)
                 .map(|a| a.status == AgentStatus::Idle)
                 .unwrap_or(false)
         };
 
-        let mut agents = self.agents.lock().unwrap();
+        let mut agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(agent) = agents.get_mut(agent_id) {
             agent.last_heartbeat = timestamp_now();
             if let Some(s) = status {
@@ -300,7 +300,7 @@ impl Orchestrator {
     #[allow(clippy::manual_find)]
     pub fn proactive_assign_to(&self, agent_id: &str) -> Option<Task> {
         let (agent_status, agent_skills) = {
-            let agents = self.agents.lock().unwrap();
+            let agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
             match agents.get(agent_id) {
                 Some(a) => (a.status, a.skills.clone()),
                 None => return None,
@@ -367,7 +367,7 @@ impl Orchestrator {
             parent_task: parent.map(String::from),
         };
 
-        self.tasks.lock().unwrap().insert(id.clone(), task);
+        self.tasks.lock().unwrap_or_else(|e| e.into_inner()).insert(id.clone(), task);
 
         id
     }
@@ -391,12 +391,12 @@ impl Orchestrator {
             timestamp: now,
         };
 
-        self.messages.lock().unwrap().push(msg);
+        self.messages.lock().unwrap_or_else(|e| e.into_inner()).push(msg);
         id
     }
 
     pub fn get_pending_messages(&self, agent_id: &str) -> Vec<OrchestratorMessage> {
-        let mut messages = self.messages.lock().unwrap();
+        let mut messages = self.messages.lock().unwrap_or_else(|e| e.into_inner());
         let (pending, remaining): (Vec<OrchestratorMessage>, Vec<OrchestratorMessage>) =
             messages.drain(..).partition(|m| {
                 match &m.to {
@@ -411,7 +411,7 @@ impl Orchestrator {
     }
 
     pub fn find_best_agent(&self, skills_needed: &[String]) -> Option<String> {
-        let agents = self.agents.lock().unwrap();
+        let agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
 
         let mut candidates: Vec<&Agent> = agents
             .values()
@@ -427,7 +427,7 @@ impl Orchestrator {
     pub fn assign_task(&self, task_id: &str, agent_id: &str) -> bool {
         // Check resource limits before assigning task
         let agent_type = {
-            let agents = self.agents.lock().unwrap();
+            let agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
             agents
                 .get(agent_id)
                 .map(|a| a.agent_type.clone())
@@ -451,7 +451,7 @@ impl Orchestrator {
         }
 
         let task_desc = {
-            let mut tasks = self.tasks.lock().unwrap();
+            let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(task) = tasks.get_mut(task_id) {
                 task.status = TaskStatus::Assigned;
                 task.assigned_to = Some(agent_id.to_string());
@@ -462,7 +462,7 @@ impl Orchestrator {
         };
 
         if let Some(desc) = task_desc {
-            let mut agents = self.agents.lock().unwrap();
+            let mut agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(agent) = agents.get_mut(agent_id) {
                 agent.status = AgentStatus::Busy;
                 agent.current_task = Some(task_id.to_string());
@@ -482,7 +482,7 @@ impl Orchestrator {
                     "action": "task_assigned",
                     "task_id": task_id,
                     "description": desc,
-                    "priority": self.tasks.lock().unwrap().get(task_id).map(|t| t.priority).unwrap_or(0)
+                    "priority": self.tasks.lock().unwrap_or_else(|e| e.into_inner()).get(task_id).map(|t| t.priority).unwrap_or(0)
                 }),
             );
             true
@@ -493,7 +493,7 @@ impl Orchestrator {
 
     pub fn complete_task(&self, task_id: &str, success: bool) {
         let agent_id = {
-            let mut tasks = self.tasks.lock().unwrap();
+            let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(task) = tasks.get_mut(task_id) {
                 task.status = if success {
                     TaskStatus::Completed
@@ -507,7 +507,7 @@ impl Orchestrator {
         };
 
         if let Some(aid) = agent_id {
-            let mut agents = self.agents.lock().unwrap();
+            let mut agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(agent) = agents.get_mut(&aid) {
                 agent.status = AgentStatus::Idle;
                 agent.current_task = None;
@@ -522,7 +522,7 @@ impl Orchestrator {
 
     pub fn delegate_task(&self, task_id: &str, from_agent: &str) -> Option<String> {
         let task = {
-            let tasks = self.tasks.lock().unwrap();
+            let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
             tasks.get(task_id).cloned()
         }?;
 
@@ -577,8 +577,8 @@ impl Orchestrator {
     }
 
     pub fn get_system_status(&self) -> serde_json::Value {
-        let agents = self.agents.lock().unwrap();
-        let tasks = self.tasks.lock().unwrap();
+        let agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
+        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
 
         serde_json::json!({
             "agents": {
@@ -619,7 +619,7 @@ impl Orchestrator {
         let timeout = timeout_secs as i64;
 
         let stale: Vec<String> = {
-            let agents = self.agents.lock().unwrap();
+            let agents = self.agents.lock().unwrap_or_else(|e| e.into_inner());
             agents
                 .iter()
                 .filter(|(_, a)| now - a.last_heartbeat > timeout)

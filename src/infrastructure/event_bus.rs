@@ -37,19 +37,19 @@ impl EventBus {
     }
 
     pub fn subscribe(&self, session_id: &str, _events: Vec<EventType>) {
-        let mut clients = self.clients.write().unwrap();
+        let mut clients = self.clients.write().unwrap_or_else(|e| e.into_inner());
         clients.insert(session_id.to_string(), "subscribed".to_string());
         eprintln!("[EventBus] Client subscribed: {}", &session_id);
     }
 
     pub fn unsubscribe(&self, session_id: &str) {
-        let mut clients = self.clients.write().unwrap();
+        let mut clients = self.clients.write().unwrap_or_else(|e| e.into_inner());
         clients.remove(session_id);
         eprintln!("[EventBus] Client unsubscribed: {}", session_id);
     }
 
     pub fn publish(&self, event: Event) {
-        let mut history = self.event_history.write().unwrap();
+        let mut history = self.event_history.write().unwrap_or_else(|e| e.into_inner());
         history.push(event.clone());
         if history.len() > 1000 {
             history.remove(0);
