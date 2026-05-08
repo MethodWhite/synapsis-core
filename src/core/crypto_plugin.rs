@@ -19,6 +19,12 @@ pub struct CryptoPlugin {
     legacy_provider: Arc<SynapsisPqcProvider>,
 }
 
+impl Default for CryptoPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CryptoPlugin {
     pub fn new() -> Self {
         Self {

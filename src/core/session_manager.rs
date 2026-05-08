@@ -183,9 +183,8 @@ impl SessionManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_session_lifecycle() {
         // Test would require actual DB connection
         assert!(true);

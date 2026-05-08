@@ -76,6 +76,7 @@ pub enum AgentRole {
 }
 
 impl AgentRole {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "orchestrator" | "orch" | "coordinator" => Self::Orchestrator,
@@ -221,6 +222,7 @@ pub enum TaskStatus {
 }
 
 impl TaskStatus {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "pending" => Some(Self::Pending),

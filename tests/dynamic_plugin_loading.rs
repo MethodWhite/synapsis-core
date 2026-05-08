@@ -3,7 +3,7 @@
 //! These tests require a compiled plugin .so file.
 //! Run `cargo build --release` in synapsis-plugins-example/hello_plugin first.
 
-use synapsis_core::domain::{DynamicPluginLoader, PluginRegistry, SynapsisPlugin};
+use synapsis_core::domain::{DynamicPluginLoader, PluginRegistry};
 
 #[test]
 fn test_load_hello_plugin() {

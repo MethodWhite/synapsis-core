@@ -8,6 +8,7 @@
 //! - Sistema de orquestación multi-agente
 //! - Compresión de contexto y budget tracking
 
+#[allow(clippy::module_inception)]
 pub mod context;
 pub mod context_compression;
 pub mod orchestration;

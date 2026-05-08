@@ -51,7 +51,7 @@ impl SessionContextManager {
             )
             .optional()?;
 
-        if let Some(_) = exists {
+        if exists.is_some() {
             // Update existing
             conn.execute(
                 "UPDATE context_cache SET 

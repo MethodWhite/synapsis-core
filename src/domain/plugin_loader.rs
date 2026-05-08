@@ -178,7 +178,6 @@ macro_rules! destroy_plugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::plugin::*;
 
     #[test]
     fn test_loader_creation() {

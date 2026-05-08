@@ -50,10 +50,7 @@ const PROTECTED_PORTS: &[u16] = &[
 
 /// Check if a port is available for binding
 fn is_port_available(port: u16) -> bool {
-    match TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], port))) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], port))).is_ok()
 }
 
 /// Check if a port is in the protected list or well-known range
@@ -372,13 +369,8 @@ impl ServerProtection {
         }
 
         // Fallback: any available port in range
-        for port in config.min_port..=config.max_port {
-            if !is_port_protected(port) && is_port_available(port) {
-                return Some(port);
-            }
-        }
-
-        None
+        (config.min_port..=config.max_port)
+            .find(|&port| !is_port_protected(port) && is_port_available(port))
     }
 
     /// Notify connections about port change

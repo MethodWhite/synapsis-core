@@ -15,6 +15,12 @@ pub struct MainServerHandler {
     // For now, this is a placeholder
 }
 
+impl Default for MainServerHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MainServerHandler {
     pub fn new() -> Self {
         Self {}
@@ -144,6 +150,12 @@ impl RpcMethodHandler for MainServerHandler {
 pub struct TcpServerHandler {
     // We'll add fields later when we integrate with server.rs
     // For now, this is a placeholder
+}
+
+impl Default for TcpServerHandler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TcpServerHandler {

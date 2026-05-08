@@ -9,6 +9,12 @@ use crate::domain::Result;
 /// Adapter for the built-in PQC implementation in `synapsis::core::pqc`
 pub struct SynapsisPqcProvider;
 
+impl Default for SynapsisPqcProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SynapsisPqcProvider {
     pub fn new() -> Self {
         Self
@@ -45,13 +51,12 @@ impl CryptoProvider for SynapsisPqcProvider {
         match algorithm {
             Kyber512 => {
                 use crate::core::pqc::generate_kyber_keypair;
-                generate_kyber_keypair()
-                    .map_err(|e| crate::domain::errors::SynapsisError::internal_bug(e))
+                generate_kyber_keypair().map_err(crate::domain::errors::SynapsisError::internal_bug)
             }
             Dilithium5 => {
                 use crate::core::pqc::generate_dilithium_keypair;
                 generate_dilithium_keypair()
-                    .map_err(|e| crate::domain::errors::SynapsisError::internal_bug(e))
+                    .map_err(crate::domain::errors::SynapsisError::internal_bug)
             }
             _ => Err(crate::domain::errors::SynapsisError::crypto_pqc_not_supported()),
         }
@@ -67,7 +72,7 @@ impl CryptoProvider for SynapsisPqcProvider {
             Kyber512 => {
                 use crate::core::pqc::kyber_encapsulate;
                 kyber_encapsulate(public_key)
-                    .map_err(|e| crate::domain::errors::SynapsisError::internal_bug(e))
+                    .map_err(crate::domain::errors::SynapsisError::internal_bug)
             }
             _ => Err(crate::domain::errors::SynapsisError::crypto_pqc_not_supported()),
         }
@@ -84,7 +89,7 @@ impl CryptoProvider for SynapsisPqcProvider {
             Kyber512 => {
                 use crate::core::pqc::kyber_decapsulate;
                 kyber_decapsulate(ciphertext, secret_key)
-                    .map_err(|e| crate::domain::errors::SynapsisError::internal_bug(e))
+                    .map_err(crate::domain::errors::SynapsisError::internal_bug)
             }
             _ => Err(crate::domain::errors::SynapsisError::crypto_pqc_not_supported()),
         }
@@ -96,7 +101,7 @@ impl CryptoProvider for SynapsisPqcProvider {
             Dilithium5 => {
                 use crate::core::pqc::dilithium_sign;
                 dilithium_sign(secret_key, message)
-                    .map_err(|e| crate::domain::errors::SynapsisError::internal_bug(e))
+                    .map_err(crate::domain::errors::SynapsisError::internal_bug)
             }
             _ => Err(crate::domain::errors::SynapsisError::crypto_pqc_not_supported()),
         }
@@ -130,7 +135,7 @@ impl CryptoProvider for SynapsisPqcProvider {
                 let mut key_array = [0u8; 32];
                 key_array.copy_from_slice(key);
                 encrypt(plaintext, &key_array)
-                    .map_err(|e| crate::domain::errors::SynapsisError::internal_bug(e))
+                    .map_err(crate::domain::errors::SynapsisError::internal_bug)
             }
             _ => Err(crate::domain::errors::SynapsisError::crypto_pqc_not_supported()),
         }
@@ -147,7 +152,7 @@ impl CryptoProvider for SynapsisPqcProvider {
                 let mut key_array = [0u8; 32];
                 key_array.copy_from_slice(key);
                 decrypt(ciphertext, &key_array)
-                    .map_err(|e| crate::domain::errors::SynapsisError::internal_bug(e))
+                    .map_err(crate::domain::errors::SynapsisError::internal_bug)
             }
             _ => Err(crate::domain::errors::SynapsisError::crypto_pqc_not_supported()),
         }

@@ -87,6 +87,12 @@ pub struct McpAutoconfigurator {
     known_mcp_clients: HashMap<String, McpClientConfig>,
 }
 
+impl Default for McpAutoconfigurator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl McpAutoconfigurator {
     /// Create a new autoconfigurator
     pub fn new() -> Self {

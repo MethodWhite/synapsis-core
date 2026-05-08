@@ -117,7 +117,7 @@ impl PluginRegistry {
     ) {
         self.extensions
             .entry(point)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(extension as std::sync::Arc<dyn std::any::Any + Send + Sync>);
     }
 

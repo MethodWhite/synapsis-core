@@ -919,6 +919,7 @@ impl Database {
     }
 
     /// Log an audit entry (internal version that takes an existing connection)
+    #[allow(clippy::too_many_arguments)]
     fn log_audit_with_conn(
         &self,
         conn: &Connection,
@@ -1700,6 +1701,7 @@ impl Database {
         Ok(conn.last_insert_rowid())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn publish_event(
         &self,
         event_type: &str,
@@ -1759,68 +1761,55 @@ impl Database {
         };
 
         let mut stmt = conn.prepare(&sql)?;
-        let rows: Vec<serde_json::Value> = if channel.is_some() && project.is_some() {
-            stmt.query_map(
-                rusqlite::params![
-                    since,
-                    channel.unwrap().to_string(),
-                    project.unwrap().to_string()
-                ],
-                |row| {
-                    Ok(serde_json::json!({
-                        "id": row.get::<_, i64>(0)?,
-                        "event_type": row.get::<_, String>(1)?,
-                        "from": row.get::<_, Option<String>>(2)?,
-                        "to": row.get::<_, Option<String>>(3)?,
-                        "project": row.get::<_, Option<String>>(4)?,
-                        "channel": row.get::<_, String>(5)?,
-                        "content": row.get::<_, Option<String>>(6)?,
-                        "priority": row.get::<_, i32>(7)?,
-                        "read": row.get::<_, i32>(8)? != 0,
-                        "timestamp": row.get::<_, i64>(9)?
-                    }))
-                },
-            )?
+        let rows: Vec<serde_json::Value> = if let (Some(ch), Some(pr)) = (&channel, &project) {
+            stmt.query_map(rusqlite::params![since, ch, pr], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, i64>(0)?,
+                    "event_type": row.get::<_, String>(1)?,
+                    "from": row.get::<_, Option<String>>(2)?,
+                    "to": row.get::<_, Option<String>>(3)?,
+                    "project": row.get::<_, Option<String>>(4)?,
+                    "channel": row.get::<_, String>(5)?,
+                    "content": row.get::<_, Option<String>>(6)?,
+                    "priority": row.get::<_, i32>(7)?,
+                    "read": row.get::<_, i32>(8)? != 0,
+                    "timestamp": row.get::<_, i64>(9)?
+                }))
+            })?
             .filter_map(|r| r.ok())
             .collect()
-        } else if channel.is_some() {
-            stmt.query_map(
-                rusqlite::params![since, channel.unwrap().to_string()],
-                |row| {
-                    Ok(serde_json::json!({
-                        "id": row.get::<_, i64>(0)?,
-                        "event_type": row.get::<_, String>(1)?,
-                        "from": row.get::<_, Option<String>>(2)?,
-                        "to": row.get::<_, Option<String>>(3)?,
-                        "project": row.get::<_, Option<String>>(4)?,
-                        "channel": row.get::<_, String>(5)?,
-                        "content": row.get::<_, Option<String>>(6)?,
-                        "priority": row.get::<_, i32>(7)?,
-                        "read": row.get::<_, i32>(8)? != 0,
-                        "timestamp": row.get::<_, i64>(9)?
-                    }))
-                },
-            )?
+        } else if let Some(ch) = &channel {
+            stmt.query_map(rusqlite::params![since, ch], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, i64>(0)?,
+                    "event_type": row.get::<_, String>(1)?,
+                    "from": row.get::<_, Option<String>>(2)?,
+                    "to": row.get::<_, Option<String>>(3)?,
+                    "project": row.get::<_, Option<String>>(4)?,
+                    "channel": row.get::<_, String>(5)?,
+                    "content": row.get::<_, Option<String>>(6)?,
+                    "priority": row.get::<_, i32>(7)?,
+                    "read": row.get::<_, i32>(8)? != 0,
+                    "timestamp": row.get::<_, i64>(9)?
+                }))
+            })?
             .filter_map(|r| r.ok())
             .collect()
-        } else if project.is_some() {
-            stmt.query_map(
-                rusqlite::params![since, project.unwrap().to_string()],
-                |row| {
-                    Ok(serde_json::json!({
-                        "id": row.get::<_, i64>(0)?,
-                        "event_type": row.get::<_, String>(1)?,
-                        "from": row.get::<_, Option<String>>(2)?,
-                        "to": row.get::<_, Option<String>>(3)?,
-                        "project": row.get::<_, Option<String>>(4)?,
-                        "channel": row.get::<_, String>(5)?,
-                        "content": row.get::<_, Option<String>>(6)?,
-                        "priority": row.get::<_, i32>(7)?,
-                        "read": row.get::<_, i32>(8)? != 0,
-                        "timestamp": row.get::<_, i64>(9)?
-                    }))
-                },
-            )?
+        } else if let Some(pr) = &project {
+            stmt.query_map(rusqlite::params![since, pr], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, i64>(0)?,
+                    "event_type": row.get::<_, String>(1)?,
+                    "from": row.get::<_, Option<String>>(2)?,
+                    "to": row.get::<_, Option<String>>(3)?,
+                    "project": row.get::<_, Option<String>>(4)?,
+                    "channel": row.get::<_, String>(5)?,
+                    "content": row.get::<_, Option<String>>(6)?,
+                    "priority": row.get::<_, i32>(7)?,
+                    "read": row.get::<_, i32>(8)? != 0,
+                    "timestamp": row.get::<_, i64>(9)?
+                }))
+            })?
             .filter_map(|r| r.ok())
             .collect()
         } else {

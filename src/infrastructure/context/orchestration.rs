@@ -55,24 +55,25 @@ pub enum AgentType {
 
 impl AgentType {
     pub fn can_handle(&self, task: &TaskType) -> bool {
-        match (self, task) {
-            (AgentType::Orchestrator, _) => true,
-            (AgentType::Coder, TaskType::Code) | (AgentType::Coder, TaskType::Refactor) => true,
-            (AgentType::Researcher, TaskType::Research)
-            | (AgentType::Researcher, TaskType::Analysis) => true,
-            (AgentType::Reviewer, TaskType::Review) | (AgentType::Reviewer, TaskType::Code) => true,
-            (AgentType::Tester, TaskType::Test) | (AgentType::Tester, TaskType::Benchmark) => true,
-            (AgentType::Architect, TaskType::Design) | (AgentType::Architect, TaskType::Plan) => {
-                true
-            }
-            (AgentType::Security, TaskType::SecurityAudit)
-            | (AgentType::Security, TaskType::Scan) => true,
-            (AgentType::Docs, TaskType::Documentation) => true,
-            (AgentType::DevOps, TaskType::Deploy) | (AgentType::DevOps, TaskType::Configure) => {
-                true
-            }
-            _ => false,
-        }
+        matches!(
+            (self, task),
+            (AgentType::Orchestrator, _)
+                | (AgentType::Coder, TaskType::Code)
+                | (AgentType::Coder, TaskType::Refactor)
+                | (AgentType::Researcher, TaskType::Research)
+                | (AgentType::Researcher, TaskType::Analysis)
+                | (AgentType::Reviewer, TaskType::Review)
+                | (AgentType::Reviewer, TaskType::Code)
+                | (AgentType::Tester, TaskType::Test)
+                | (AgentType::Tester, TaskType::Benchmark)
+                | (AgentType::Architect, TaskType::Design)
+                | (AgentType::Architect, TaskType::Plan)
+                | (AgentType::Security, TaskType::SecurityAudit)
+                | (AgentType::Security, TaskType::Scan)
+                | (AgentType::Docs, TaskType::Documentation)
+                | (AgentType::DevOps, TaskType::Deploy)
+                | (AgentType::DevOps, TaskType::Configure)
+        )
     }
 }
 
@@ -226,7 +227,7 @@ impl Orchestrator {
         let id = task.id.clone();
         self.active_tasks.insert(id.clone(), task);
         self.metrics.total_tasks += 1;
-        self.log(&"Task planned".to_string(), None, Some(id.clone()));
+        self.log("Task planned", None, Some(id.clone()));
         id
     }
 

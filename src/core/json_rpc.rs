@@ -93,6 +93,7 @@ impl JsonRpcResponse {
     }
 
     /// Convert to JSON string
+    #[allow(clippy::inherent_to_string)]
     pub fn to_string(&self) -> String {
         serde_json::to_string(self).unwrap_or_else(|_| {
             r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":null}"#

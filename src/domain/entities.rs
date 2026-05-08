@@ -241,7 +241,7 @@ impl SearchParams {
         }
     }
     pub fn with_limit(mut self, limit: i32) -> Self {
-        self.limit = limit.min(100).max(1);
+        self.limit = limit.clamp(1, 100);
         self
     }
 }
