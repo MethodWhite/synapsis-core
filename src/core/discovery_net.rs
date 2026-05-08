@@ -68,6 +68,9 @@ impl NetworkDiscovery {
     }
 
     pub fn list_nodes(&self) -> HashMap<String, String> {
-        self.found_nodes.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.found_nodes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }

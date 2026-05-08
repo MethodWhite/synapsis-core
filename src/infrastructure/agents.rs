@@ -366,13 +366,20 @@ impl AgentRegistry {
 
     pub fn register(&self, agent: Agent) -> AgentId {
         let id = agent.id.clone();
-        self.agents.write().unwrap_or_else(|e| e.into_inner()).insert(id.clone(), agent);
+        self.agents
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id.clone(), agent);
         let _ = self.save();
         id
     }
 
     pub fn unregister(&self, id: &AgentId) -> Option<Agent> {
-        let agent = self.agents.write().unwrap_or_else(|e| e.into_inner()).remove(id);
+        let agent = self
+            .agents
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id);
         let _ = self.save();
         agent
     }
@@ -400,7 +407,12 @@ impl AgentRegistry {
 
     pub fn update_state(&self, id: &AgentId, state: AgentState) -> bool {
         let updated = {
-            if let Some(agent) = self.agents.write().unwrap_or_else(|e| e.into_inner()).get_mut(id) {
+            if let Some(agent) = self
+                .agents
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .get_mut(id)
+            {
                 agent.state = state;
                 if state == AgentState::Working {
                     agent.update_activity();
@@ -431,7 +443,10 @@ impl AgentRegistry {
 
         let msg = AgentMessage::new(from, to, content, msg_type);
         let id = msg.id.clone();
-        self.messages.write().unwrap_or_else(|e| e.into_inner()).push(msg);
+        self.messages
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(msg);
         let _ = self.save();
         Some(id)
     }
@@ -456,7 +471,10 @@ impl AgentRegistry {
     ) -> TaskId {
         let task = Task::new(title, description, priority);
         let id = task.id.clone();
-        self.tasks.write().unwrap_or_else(|e| e.into_inner()).push(task);
+        self.tasks
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(task);
         let _ = self.save();
         id
     }

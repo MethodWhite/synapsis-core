@@ -10,8 +10,8 @@ use base64::{engine::general_purpose, Engine as _};
 use hex;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 pub mod multi_agent;
@@ -79,7 +79,8 @@ impl Database {
         conn.execute_batch("PRAGMA cache_size = -2000").unwrap();
         conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
         conn.execute_batch("PRAGMA busy_timeout = 5000").unwrap();
-        conn.execute_batch("PRAGMA wal_autocheckpoint = 1000").unwrap();
+        conn.execute_batch("PRAGMA wal_autocheckpoint = 1000")
+            .unwrap();
 
         Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -125,7 +126,8 @@ impl Database {
         conn.execute_batch("PRAGMA cache_size = -2000").unwrap();
         conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
         conn.execute_batch("PRAGMA busy_timeout = 5000").unwrap();
-        conn.execute_batch("PRAGMA wal_autocheckpoint = 1000").unwrap();
+        conn.execute_batch("PRAGMA wal_autocheckpoint = 1000")
+            .unwrap();
 
         Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -180,7 +182,12 @@ impl Database {
         let writes = self.total_writes.load(Ordering::Relaxed);
         let reads = self.total_reads.load(Ordering::Relaxed);
         let failed = self.failed_writes.load(Ordering::Relaxed);
-        let last = self.last_write_at.lock().unwrap_or_else(|e| e.into_inner()).elapsed().as_secs();
+        let last = self
+            .last_write_at
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .elapsed()
+            .as_secs();
 
         serde_json::json!({
             "pending_writes": pending,

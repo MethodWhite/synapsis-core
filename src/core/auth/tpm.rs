@@ -186,7 +186,10 @@ impl TpmMfaProvider {
         }
 
         {
-            let mut codes = self.mfa_backup_codes.write().unwrap_or_else(|e| e.into_inner());
+            let mut codes = self
+                .mfa_backup_codes
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             codes.insert(device_id.to_string(), backup_codes.clone());
         }
 
@@ -237,7 +240,10 @@ impl TpmMfaProvider {
     }
 
     pub fn verify_backup_code(&self, device_id: &str, code: &str) -> Result<bool, TpmError> {
-        let mut codes = self.mfa_backup_codes.write().unwrap_or_else(|e| e.into_inner());
+        let mut codes = self
+            .mfa_backup_codes
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
 
         if let Some(codes_vec) = codes.get_mut(device_id) {
             if let Some(pos) = codes_vec.iter().position(|c| c == code) {
@@ -251,7 +257,10 @@ impl TpmMfaProvider {
 
     pub fn remove_mfa(&self, device_id: &str) {
         let mut secrets = self.mfa_secrets.write().unwrap_or_else(|e| e.into_inner());
-        let mut codes = self.mfa_backup_codes.write().unwrap_or_else(|e| e.into_inner());
+        let mut codes = self
+            .mfa_backup_codes
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         secrets.remove(device_id);
         codes.remove(device_id);
     }

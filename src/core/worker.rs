@@ -164,15 +164,25 @@ impl WorkerRegistry {
 
     pub fn register(&self, worker: Arc<dyn WorkerAgent>) {
         let id = worker.id().to_string();
-        self.workers.lock().unwrap_or_else(|e| e.into_inner()).insert(id, worker);
+        self.workers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, worker);
     }
 
     pub fn unregister(&self, id: &str) {
-        self.workers.lock().unwrap_or_else(|e| e.into_inner()).remove(id);
+        self.workers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id);
     }
 
     pub fn get(&self, id: &str) -> Option<Arc<dyn WorkerAgent>> {
-        self.workers.lock().unwrap_or_else(|e| e.into_inner()).get(id).cloned()
+        self.workers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(id)
+            .cloned()
     }
 
     pub fn find_by_skill(&self, skill: &str) -> Vec<Arc<dyn WorkerAgent>> {
@@ -186,7 +196,12 @@ impl WorkerRegistry {
     }
 
     pub fn list(&self) -> Vec<String> {
-        self.workers.lock().unwrap_or_else(|e| e.into_inner()).keys().cloned().collect()
+        self.workers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .keys()
+            .cloned()
+            .collect()
     }
 }
 
@@ -336,7 +351,10 @@ impl WorkerAgent for ShellWorker {
         }
 
         let start = Instant::now();
-        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+        *self
+            .last_heartbeat
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Instant::now();
 
         let command = task
             .payload
@@ -365,7 +383,10 @@ impl WorkerAgent for ShellWorker {
     }
 
     fn heartbeat(&self) -> bool {
-        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+        *self
+            .last_heartbeat
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Instant::now();
         true
     }
 }
@@ -427,7 +448,10 @@ impl WorkerAgent for FileWorker {
     }
 
     fn execute_task(&self, task: &Task) -> Result<TaskResult, TaskError> {
-        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+        *self
+            .last_heartbeat
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Instant::now();
         let start = Instant::now();
 
         match task.task_type {
@@ -487,7 +511,10 @@ impl WorkerAgent for FileWorker {
     }
 
     fn heartbeat(&self) -> bool {
-        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+        *self
+            .last_heartbeat
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Instant::now();
         true
     }
 }
@@ -606,7 +633,10 @@ impl WorkerAgent for CodeWorker {
     }
 
     fn execute_task(&self, task: &Task) -> Result<TaskResult, TaskError> {
-        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+        *self
+            .last_heartbeat
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Instant::now();
         let start = Instant::now();
 
         match task.task_type {
@@ -654,7 +684,10 @@ impl WorkerAgent for CodeWorker {
     }
 
     fn heartbeat(&self) -> bool {
-        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+        *self
+            .last_heartbeat
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Instant::now();
         true
     }
 }
@@ -750,7 +783,10 @@ impl WorkerAgent for SearchWorker {
     }
 
     fn execute_task(&self, task: &Task) -> Result<TaskResult, TaskError> {
-        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+        *self
+            .last_heartbeat
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Instant::now();
         let start = Instant::now();
 
         let search_type = task
@@ -814,7 +850,10 @@ impl WorkerAgent for SearchWorker {
     }
 
     fn heartbeat(&self) -> bool {
-        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+        *self
+            .last_heartbeat
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Instant::now();
         true
     }
 }
@@ -893,7 +932,10 @@ impl WorkerAgent for GitWorker {
             ));
         }
 
-        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+        *self
+            .last_heartbeat
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Instant::now();
         let start = Instant::now();
 
         let command = task
@@ -927,7 +969,10 @@ impl WorkerAgent for GitWorker {
     }
 
     fn heartbeat(&self) -> bool {
-        *self.last_heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+        *self
+            .last_heartbeat
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Instant::now();
         true
     }
 }

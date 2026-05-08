@@ -417,11 +417,15 @@ impl ServerProtection {
                     println!("[PROTECTION] New connection from {}", addr);
 
                     // Register connection
-                    let mut id_guard = self.next_connection_id.lock().unwrap_or_else(|e| e.into_inner());
+                    let mut id_guard = self
+                        .next_connection_id
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
                     let connection_id = *id_guard;
                     *id_guard += 1;
 
-                    let mut connections_guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+                    let mut connections_guard =
+                        self.connections.lock().unwrap_or_else(|e| e.into_inner());
                     connections_guard.insert(connection_id, stream.try_clone()?);
 
                     // Spawn handler thread
@@ -566,7 +570,10 @@ impl ProcessIdentityManager {
         // For now, we simulate PID protection by changing how the process
         // appears in listings (process name, session ID, etc.)
 
-        let mut identity_guard = self.current_identity.lock().unwrap_or_else(|e| e.into_inner());
+        let mut identity_guard = self
+            .current_identity
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         identity_guard.protection_level = ProtectionLevel::Advanced;
 
         // Generate unique process name to avoid conflicts
@@ -617,7 +624,10 @@ impl ProcessIdentityManager {
 
     /// Rotate session ID (simulates PID change)
     pub fn rotate_session(&self) -> io::Result<String> {
-        let mut identity_guard = self.current_identity.lock().unwrap_or_else(|e| e.into_inner());
+        let mut identity_guard = self
+            .current_identity
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
 
         let new_session_id = Self::generate_session_id();
         identity_guard.session_id = new_session_id.clone();
@@ -642,14 +652,20 @@ impl ProcessIdentityManager {
 
     /// Get current identity
     pub fn get_identity(&self) -> ProcessIdentity {
-        self.current_identity.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.current_identity
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Disable protection
     pub fn disable_protection(&self) {
         self.protection_enabled.store(false, Ordering::SeqCst);
 
-        let mut identity_guard = self.current_identity.lock().unwrap_or_else(|e| e.into_inner());
+        let mut identity_guard = self
+            .current_identity
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         identity_guard.protection_level = ProtectionLevel::None;
 
         // Restore original process name

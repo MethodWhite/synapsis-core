@@ -203,7 +203,10 @@ impl Orchestrator {
             last_heartbeat: now,
         };
 
-        self.agents.lock().unwrap_or_else(|e| e.into_inner()).insert(id.clone(), agent);
+        self.agents
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id.clone(), agent);
 
         // Register agent with resource manager (PID unknown initially)
         self.resource_manager.register_agent(&id, None);
@@ -367,7 +370,10 @@ impl Orchestrator {
             parent_task: parent.map(String::from),
         };
 
-        self.tasks.lock().unwrap_or_else(|e| e.into_inner()).insert(id.clone(), task);
+        self.tasks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id.clone(), task);
 
         id
     }
@@ -391,7 +397,10 @@ impl Orchestrator {
             timestamp: now,
         };
 
-        self.messages.lock().unwrap_or_else(|e| e.into_inner()).push(msg);
+        self.messages
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(msg);
         id
     }
 

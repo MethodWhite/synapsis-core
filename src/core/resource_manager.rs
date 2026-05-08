@@ -302,7 +302,8 @@ impl ResourceManager {
         if let Ok(data) = std::fs::read_to_string(path) {
             if let Ok(config) = serde_json::from_str::<ResourceLimitsConfig>(&data) {
                 let mut agent_limits = self.agent_limits.lock().unwrap_or_else(|e| e.into_inner());
-                let mut global_limits = self.global_limits.lock().unwrap_or_else(|e| e.into_inner());
+                let mut global_limits =
+                    self.global_limits.lock().unwrap_or_else(|e| e.into_inner());
                 *agent_limits = config.agent_limits;
                 *global_limits = config.global;
             }
@@ -312,8 +313,16 @@ impl ResourceManager {
 
     /// Save limits to JSON file
     pub fn save_limits(&self, path: &std::path::Path) -> std::io::Result<()> {
-        let agent_limits = self.agent_limits.lock().unwrap_or_else(|e| e.into_inner()).clone();
-        let global_limits = self.global_limits.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let agent_limits = self
+            .agent_limits
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        let global_limits = self
+            .global_limits
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         let config = ResourceLimitsConfig {
             global: global_limits,
             agent_limits,

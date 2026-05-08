@@ -261,7 +261,10 @@ impl TaskQueue {
         let task_id = task.id.clone();
 
         {
-            let mut queue = self.pending_queue.write().unwrap_or_else(|e| e.into_inner());
+            let mut queue = self
+                .pending_queue
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             queue.push(PriorityTask::new(task, order));
         }
 
@@ -356,7 +359,10 @@ impl TaskQueue {
 
     pub fn start_task(&self, task_id: &str, agent_id: &str) -> bool {
         let (should_emit, _task) = {
-            let mut assigned = self.assigned_tasks.write().unwrap_or_else(|e| e.into_inner());
+            let mut assigned = self
+                .assigned_tasks
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             if let Some(task) = assigned.get_mut(task_id) {
                 if task.assigned_to.as_deref() == Some(agent_id) {
                     task.status = TaskStatus::InProgress;
@@ -384,7 +390,10 @@ impl TaskQueue {
 
     pub fn complete_task(&self, task_id: &str, result: Option<String>, success: bool) -> bool {
         let _aid = {
-            let mut assigned = self.assigned_tasks.write().unwrap_or_else(|e| e.into_inner());
+            let mut assigned = self
+                .assigned_tasks
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             if let Some(mut task) = assigned.remove(task_id) {
                 task.result = result;
                 task.status = if success {
@@ -405,7 +414,10 @@ impl TaskQueue {
 
                 let _t = task.clone();
                 {
-                    let mut completed = self.completed_tasks.write().unwrap_or_else(|e| e.into_inner());
+                    let mut completed = self
+                        .completed_tasks
+                        .write()
+                        .unwrap_or_else(|e| e.into_inner());
                     completed.insert(task_id.to_string(), task);
                 }
 
@@ -516,12 +528,18 @@ impl TaskQueue {
         }
 
         let tasks_to_assign: Vec<(Task, String)> = {
-            let mut queue = self.pending_queue.write().unwrap_or_else(|e| e.into_inner());
+            let mut queue = self
+                .pending_queue
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             let mut tasks_to_assign = Vec::new();
 
             while let Some(pt) = queue.pop() {
                 if pt.task.is_expired() && !pt.task.can_retry() {
-                    let mut failed = self.assigned_tasks.write().unwrap_or_else(|e| e.into_inner());
+                    let mut failed = self
+                        .assigned_tasks
+                        .write()
+                        .unwrap_or_else(|e| e.into_inner());
                     let mut task = pt.task;
                     task.status = TaskStatus::Failed;
                     failed.insert(task.id.clone(), task);
@@ -544,7 +562,10 @@ impl TaskQueue {
 
         for (task, agent_id) in tasks_to_assign {
             {
-                let mut assigned = self.assigned_tasks.write().unwrap_or_else(|e| e.into_inner());
+                let mut assigned = self
+                    .assigned_tasks
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner());
                 assigned.insert(task.id.clone(), task.clone());
             }
             {
@@ -612,7 +633,10 @@ impl TaskQueue {
             drop(agents);
 
             if !timed_out_agents.is_empty() {
-                let mut assigned = self.assigned_tasks.write().unwrap_or_else(|e| e.into_inner());
+                let mut assigned = self
+                    .assigned_tasks
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner());
                 let mut requeued = Vec::new();
 
                 for agent_id in &timed_out_agents {
@@ -644,7 +668,10 @@ impl TaskQueue {
                             });
                         } else {
                             t.status = TaskStatus::Failed;
-                            let mut completed = self.completed_tasks.write().unwrap_or_else(|e| e.into_inner());
+                            let mut completed = self
+                                .completed_tasks
+                                .write()
+                                .unwrap_or_else(|e| e.into_inner());
                             completed.insert(task_id, t);
                         }
                     }
@@ -663,7 +690,10 @@ impl TaskQueue {
 
     pub fn cancel_task(&self, task_id: &str) -> bool {
         {
-            let mut queue = self.pending_queue.write().unwrap_or_else(|e| e.into_inner());
+            let mut queue = self
+                .pending_queue
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             let old: Vec<PriorityTask> = queue.drain().collect();
             for pt in old {
                 if pt.task.id != task_id {
@@ -673,7 +703,10 @@ impl TaskQueue {
         }
 
         let (agent_id, was_assigned) = {
-            let mut assigned = self.assigned_tasks.write().unwrap_or_else(|e| e.into_inner());
+            let mut assigned = self
+                .assigned_tasks
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             if let Some(task) = assigned.remove(task_id) {
                 (task.assigned_to.clone(), true)
             } else {
@@ -688,7 +721,10 @@ impl TaskQueue {
             }
         }
 
-        let mut completed = self.completed_tasks.write().unwrap_or_else(|e| e.into_inner());
+        let mut completed = self
+            .completed_tasks
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         completed.insert(
             task_id.to_string(),
             Task {
@@ -757,7 +793,10 @@ impl TaskQueue {
     pub fn load(&self) -> std::io::Result<()> {
         if let Ok(file) = std::fs::File::open(self.data_dir.join("pending.json")) {
             if let Ok(pending) = serde_json::from_reader::<_, Vec<Task>>(file) {
-                let mut queue = self.pending_queue.write().unwrap_or_else(|e| e.into_inner());
+                let mut queue = self
+                    .pending_queue
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner());
                 let mut order = 0u64;
                 for task in pending {
                     queue.push(PriorityTask::new(task, order));
@@ -769,7 +808,10 @@ impl TaskQueue {
 
         if let Ok(file) = std::fs::File::open(self.data_dir.join("assigned.json")) {
             if let Ok(assigned) = serde_json::from_reader::<_, Vec<Task>>(file) {
-                let mut a = self.assigned_tasks.write().unwrap_or_else(|e| e.into_inner());
+                let mut a = self
+                    .assigned_tasks
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner());
                 for task in assigned {
                     a.insert(task.id.clone(), task);
                 }
@@ -778,7 +820,10 @@ impl TaskQueue {
 
         if let Ok(file) = std::fs::File::open(self.data_dir.join("completed.json")) {
             if let Ok(completed) = serde_json::from_reader::<_, Vec<Task>>(file) {
-                let mut c = self.completed_tasks.write().unwrap_or_else(|e| e.into_inner());
+                let mut c = self
+                    .completed_tasks
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner());
                 for task in completed {
                     c.insert(task.id.clone(), task);
                 }

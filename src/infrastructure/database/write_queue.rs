@@ -33,7 +33,7 @@ impl WriteQueue {
     pub fn submit(&self, op: WriteOp) -> bool {
         let (lock, cvar) = &*self.inner;
         let mut queued = false;
-        
+
         {
             let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
             if queue.len() < self.max_queue_size {
@@ -52,7 +52,7 @@ impl WriteQueue {
     pub fn flush(&self, conn: &Connection) -> usize {
         let (lock, _cvar) = &*self.inner;
         let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
-        
+
         if queue.is_empty() {
             return 0;
         }

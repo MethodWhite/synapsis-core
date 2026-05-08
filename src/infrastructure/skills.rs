@@ -227,13 +227,20 @@ impl SkillRegistry {
 
     pub fn register(&self, skill: Skill) -> SkillId {
         let id = skill.id.clone();
-        self.skills.write().unwrap_or_else(|e| e.into_inner()).insert(id.clone(), skill);
+        self.skills
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id.clone(), skill);
         let _ = self.save();
         id
     }
 
     pub fn unregister(&self, id: &SkillId) -> Option<Skill> {
-        let skill = self.skills.write().unwrap_or_else(|e| e.into_inner()).remove(id);
+        let skill = self
+            .skills
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id);
         let _ = self.save();
         skill
     }
@@ -280,7 +287,12 @@ impl SkillRegistry {
     }
 
     pub fn enable(&self, id: &SkillId) -> bool {
-        if let Some(skill) = self.skills.write().unwrap_or_else(|e| e.into_inner()).get_mut(id) {
+        if let Some(skill) = self
+            .skills
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_mut(id)
+        {
             skill.enabled = true;
             skill.updated_at = Timestamp::now();
             let _ = self.save();
@@ -291,7 +303,12 @@ impl SkillRegistry {
     }
 
     pub fn disable(&self, id: &SkillId) -> bool {
-        if let Some(skill) = self.skills.write().unwrap_or_else(|e| e.into_inner()).get_mut(id) {
+        if let Some(skill) = self
+            .skills
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_mut(id)
+        {
             skill.enabled = false;
             skill.updated_at = Timestamp::now();
             let _ = self.save();
@@ -317,7 +334,10 @@ impl SkillRegistry {
         activation.session_id = session_id;
         activation.context = context.to_string();
 
-        self.activations.write().unwrap_or_else(|e| e.into_inner()).push(activation.clone());
+        self.activations
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(activation.clone());
         let _ = self.save();
 
         Some(activation)

@@ -49,7 +49,10 @@ impl EventBus {
     }
 
     pub fn publish(&self, event: Event) {
-        let mut history = self.event_history.write().unwrap_or_else(|e| e.into_inner());
+        let mut history = self
+            .event_history
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         history.push(event.clone());
         if history.len() > 1000 {
             history.remove(0);
