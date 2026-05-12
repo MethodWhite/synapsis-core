@@ -23,7 +23,8 @@ impl MultiAgentDatabase {
         F: FnOnce(&Database) -> Result<T>,
     {
         // Verify session is active before allowing operations
-        if let Ok(conn) = self.db.conn.lock() {
+        {
+            let conn = self.db.get_read_conn();
             let stmt_result =
                 conn.prepare("SELECT is_active FROM agent_sessions WHERE id = ? AND is_active = 1");
             if let Ok(mut stmt) = stmt_result {
@@ -63,7 +64,8 @@ impl MultiAgentDatabase {
         ttl_secs: i64,
     ) -> Result<bool> {
         // Verify session is active before allowing lock acquisition
-        if let Ok(conn) = self.db.conn.lock() {
+        {
+            let conn = self.db.get_read_conn();
             let stmt_result =
                 conn.prepare("SELECT is_active FROM agent_sessions WHERE id = ? AND is_active = 1");
             if let Ok(mut stmt) = stmt_result {

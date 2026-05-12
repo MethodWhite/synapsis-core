@@ -21,7 +21,8 @@ use write_queue::WriteQueue;
 
 #[derive(Clone)]
 pub struct Database {
-    conn: Arc<Mutex<Connection>>,
+    read_conn: Arc<Mutex<Connection>>,
+    write_conn: Arc<Mutex<Connection>>,
     _data_dir: PathBuf,
     #[allow(dead_code)]
     db_path: PathBuf,
@@ -50,30 +51,21 @@ impl Database {
         Self::new_with_key(encryption_key)
     }
 
-    pub fn new_with_key(encryption_key: Option<Vec<u8>>) -> Self {
-        let data_dir = dirs::data_local_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("synapsis");
-
-        std::fs::create_dir_all(&data_dir).ok();
-        let db_path = data_dir.join("synapsis.db");
-        let conn = if let Some(key) = &encryption_key {
-            let conn = Connection::open(&db_path).unwrap();
-            // SQLCipher expects key as bytes; we'll use hex encoding
+    /// Open a connection to the database with proper PRAGMAs
+    fn open_connection(db_path: &PathBuf, encryption_key: &Option<Vec<u8>>) -> Connection {
+        let conn = if let Some(key) = encryption_key {
+            let conn = Connection::open(db_path).unwrap();
             let hex_key = hex::encode(key);
             conn.execute_batch(&format!("PRAGMA key = 'x{}'", hex_key))
                 .unwrap();
-            // Verify encryption is active
             conn.execute_batch("PRAGMA cipher_version").unwrap();
-            // SQLCipher performance optimizations
             conn.execute_batch("PRAGMA cipher_page_size = 4096")
                 .unwrap();
             conn
         } else {
-            Connection::open(&db_path).unwrap()
+            Connection::open(db_path).unwrap()
         };
 
-        // Common performance optimizations for SQLite/SQLCipher
         conn.execute_batch("PRAGMA journal_mode = WAL").unwrap();
         conn.execute_batch("PRAGMA synchronous = NORMAL").unwrap();
         conn.execute_batch("PRAGMA cache_size = -2000").unwrap();
@@ -81,9 +73,24 @@ impl Database {
         conn.execute_batch("PRAGMA busy_timeout = 5000").unwrap();
         conn.execute_batch("PRAGMA wal_autocheckpoint = 1000")
             .unwrap();
+        conn
+    }
+
+    pub fn new_with_key(encryption_key: Option<Vec<u8>>) -> Self {
+        let data_dir = dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("synapsis");
+
+        std::fs::create_dir_all(&data_dir).ok();
+        let db_path = data_dir.join("synapsis.db");
+
+        // Open separate connections for reads and writes (WAL mode supports concurrent r/w)
+        let read_conn = Self::open_connection(&db_path, &encryption_key);
+        let write_conn = Self::open_connection(&db_path, &encryption_key);
 
         Self {
-            conn: Arc::new(Mutex::new(conn)),
+            read_conn: Arc::new(Mutex::new(read_conn)),
+            write_conn: Arc::new(Mutex::new(write_conn)),
             _data_dir: data_dir.clone(),
             db_path,
             encryption_key,
@@ -104,33 +111,14 @@ impl Database {
             .unwrap_or_else(|| PathBuf::from("."));
 
         std::fs::create_dir_all(&data_dir).ok();
-        let conn = if let Some(key) = &encryption_key {
-            let conn = Connection::open(&db_path).unwrap();
-            // SQLCipher expects key as bytes; we'll use hex encoding
-            let hex_key = hex::encode(key);
-            conn.execute_batch(&format!("PRAGMA key = 'x{}'", hex_key))
-                .unwrap();
-            // Verify encryption is active
-            conn.execute_batch("PRAGMA cipher_version").unwrap();
-            // SQLCipher performance optimizations
-            conn.execute_batch("PRAGMA cipher_page_size = 4096")
-                .unwrap();
-            conn
-        } else {
-            Connection::open(&db_path).unwrap()
-        };
 
-        // Common performance optimizations for SQLite/SQLCipher
-        conn.execute_batch("PRAGMA journal_mode = WAL").unwrap();
-        conn.execute_batch("PRAGMA synchronous = NORMAL").unwrap();
-        conn.execute_batch("PRAGMA cache_size = -2000").unwrap();
-        conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
-        conn.execute_batch("PRAGMA busy_timeout = 5000").unwrap();
-        conn.execute_batch("PRAGMA wal_autocheckpoint = 1000")
-            .unwrap();
+        // Open separate connections for reads and writes (WAL mode supports concurrent r/w)
+        let read_conn = Self::open_connection(&db_path, &encryption_key);
+        let write_conn = Self::open_connection(&db_path, &encryption_key);
 
         Self {
-            conn: Arc::new(Mutex::new(conn)),
+            read_conn: Arc::new(Mutex::new(read_conn)),
+            write_conn: Arc::new(Mutex::new(write_conn)),
             _data_dir: data_dir,
             db_path,
             encryption_key,
@@ -142,9 +130,20 @@ impl Database {
         }
     }
 
-    pub fn get_conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+    /// Get the read connection (for SELECT queries)
+    pub fn get_read_conn(&self) -> std::sync::MutexGuard<'_, Connection> {
         self.total_reads.fetch_add(1, Ordering::Relaxed);
-        self.conn.lock().unwrap_or_else(|e| e.into_inner())
+        self.read_conn.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Get the write connection (for INSERT/UPDATE/DELETE)
+    pub fn get_write_conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+        self.write_conn.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Backward-compat alias — use get_read_conn() for new code
+    pub fn get_conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+        self.get_read_conn()
     }
 
     /// Execute operations atomically in a transaction
@@ -152,7 +151,7 @@ impl Database {
     where
         F: FnOnce(&Connection) -> Result<T>,
     {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         conn.execute_batch("BEGIN IMMEDIATE")?;
         match ops(&conn) {
             Ok(result) => {
@@ -171,7 +170,7 @@ impl Database {
 
     /// Flush pending write queue
     pub fn flush_write_queue(&self) -> usize {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         self.write_queue.flush(&conn)
     }
 
@@ -361,7 +360,7 @@ impl Database {
         project_key: &str,
         pid: Option<i32>,
     ) -> Result<String> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         let now = Timestamp::now().0;
         let session_id = format!("{}-{}-{}", agent_type, agent_instance, now);
 
@@ -373,7 +372,7 @@ impl Database {
     }
 
     pub fn agent_heartbeat(&self, session_id: &str, current_task: Option<&str>) -> Result<()> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         let now = Timestamp::now().0;
 
         let rows = conn.execute(
@@ -421,7 +420,7 @@ impl Database {
         _resource_id: Option<&str>,
         ttl_secs: i64,
     ) -> Result<bool> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         let now = Timestamp::now().0;
         let expires = now + ttl_secs;
 
@@ -438,7 +437,7 @@ impl Database {
     }
 
     pub fn release_lock(&self, lock_key: &str) -> Result<()> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         conn.execute(
             "DELETE FROM active_locks WHERE lock_key = ?",
             params![lock_key],
@@ -453,7 +452,7 @@ impl Database {
         payload: &str,
         priority: i32,
     ) -> Result<String> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         let task_id = Uuid::new_v4().to_hex_string();
         let now = Timestamp::now().0;
 
@@ -472,7 +471,7 @@ impl Database {
         _parent_id: Option<&str>,
         level: i32,
     ) -> Result<String> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         let chunk_id = Uuid::new_v4().to_hex_string();
         let now = Timestamp::now().0;
 
@@ -488,7 +487,7 @@ impl Database {
         session_id: &str,
         task_type: Option<&str>,
     ) -> Result<Option<serde_json::Value>> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         let now = Timestamp::now().0;
 
         // First, find and claim a pending task
@@ -546,7 +545,7 @@ impl Database {
         result: Option<&str>,
         error: Option<&str>,
     ) -> Result<()> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         let now = Timestamp::now().0;
         let status = if error.is_some() {
             "failed"
@@ -570,7 +569,7 @@ impl Database {
         audit_status: &str,
         audit_notes: Option<&str>,
     ) -> Result<()> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         let now = Timestamp::now().0;
         let requires_audit = 0;
         conn.execute(
@@ -581,7 +580,7 @@ impl Database {
     }
 
     pub fn cancel_task(&self, task_id: &str) -> Result<()> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         let now = Timestamp::now().0;
         conn.execute(
             "UPDATE task_queue SET status = 'cancelled', completed_at = ? WHERE task_id = ?",
@@ -702,7 +701,7 @@ impl Database {
     }
 
     pub fn cleanup_stale_sessions(&self, threshold: i64) -> Result<usize> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         let deleted = conn.execute(
             "DELETE FROM agent_sessions WHERE is_active = 0 AND last_heartbeat < ?",
             params![threshold],
@@ -803,7 +802,7 @@ impl Database {
     }
 
     pub fn set_global_context(&self, project_key: &str, context_data: &str) -> Result<()> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         let now = Timestamp::now().0;
         conn.execute(
             "INSERT OR REPLACE INTO global_context (project_key, context_data, created_at, updated_at) VALUES (?, ?, ?, ?)",
@@ -828,7 +827,7 @@ impl Database {
     }
 
     pub fn import_context(&self, project_key: &str, data: &str) -> Result<i64> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         let chunks: Vec<serde_json::Value> = serde_json::from_str(data)?;
         let now = Timestamp::now().0;
         let mut imported = 0i64;
@@ -952,7 +951,7 @@ impl Database {
         new_value: Option<&str>,
         reason: Option<&str>,
     ) -> Result<()> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         self.log_audit_with_conn(
             &conn,
             observation_id,
@@ -995,7 +994,7 @@ impl Database {
         agent_id: &str,
         reason: Option<&str>,
     ) -> Result<()> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
 
         // Get current content for audit log
         let old_content: String = conn.query_row(
@@ -1036,7 +1035,7 @@ impl Database {
         agent_id: &str,
         reason: Option<&str>,
     ) -> Result<()> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
 
         // Check if observation exists and is not already deleted
         let exists: i64 = conn.query_row(
@@ -1078,7 +1077,7 @@ impl Database {
 
     /// Restore soft-deleted observation with audit logging
     pub fn restore_observation(&self, observation_id: ObservationId, agent_id: &str) -> Result<()> {
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
 
         // Check if observation exists and is deleted
         let deleted_at: Option<i64> = conn.query_row(
@@ -1128,7 +1127,7 @@ impl Default for Database {
 impl StoragePort for Database {
     fn init(&self) -> Result<()> {
         eprintln!("[DEBUG] Database::init called");
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         self.create_tables(&conn)?;
         eprintln!("[DEBUG] Tables created successfully");
         Ok(())
@@ -1203,7 +1202,7 @@ impl StoragePort for Database {
 
     fn save_observation(&self, obs: &Observation) -> Result<ObservationId> {
         eprintln!("[DEBUG] save_observation called, title: {}", obs.title);
-        let conn = self.get_conn();
+        let conn = self.get_write_conn();
         eprintln!("[DEBUG] save_observation: lock acquired");
 
         // Convert enums to integers
@@ -1691,7 +1690,7 @@ impl Database {
         content: &str,
         priority: i32,
     ) -> Result<i64> {
-        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let conn = self.get_write_conn();
         let now = chrono::Utc::now().timestamp();
         conn.execute(
             "INSERT INTO events (event_type, from_agent, project, channel, content, priority, created_at)
@@ -1712,7 +1711,7 @@ impl Database {
         content: &str,
         priority: i32,
     ) -> Result<i64> {
-        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let conn = self.get_write_conn();
         let now = chrono::Utc::now().timestamp();
         conn.execute(
             "INSERT INTO events (event_type, from_agent, to_agent, project, channel, content, priority, created_at)
@@ -1729,7 +1728,7 @@ impl Database {
         project: Option<&str>,
         limit: i32,
     ) -> Result<Vec<serde_json::Value>> {
-        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let conn = self.get_read_conn();
         let effective_limit = if limit <= 0 || limit > 1000 {
             100
         } else {
@@ -1834,7 +1833,7 @@ impl Database {
     }
 
     pub fn get_pending_messages(&self, session_id: &str) -> Result<Vec<serde_json::Value>> {
-        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let conn = self.get_read_conn();
         let mut stmt = conn.prepare(
             "SELECT id, event_type, from_agent, to_agent, project, channel, content, priority, created_at
              FROM events WHERE to_agent = ? AND read_status = 0 ORDER BY created_at ASC LIMIT 100"
@@ -1860,7 +1859,7 @@ impl Database {
     }
 
     pub fn acknowledge_event(&self, event_id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let conn = self.get_write_conn();
         conn.execute(
             "UPDATE events SET read_status = 1 WHERE id = ?",
             params![event_id],
@@ -1869,7 +1868,7 @@ impl Database {
     }
 
     pub fn cleanup_expired_events(&self) -> Result<usize> {
-        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let conn = self.get_write_conn();
         let now = chrono::Utc::now().timestamp();
         let deleted = conn.execute(
             "DELETE FROM events WHERE expires_at IS NOT NULL AND expires_at < ?",
