@@ -1,68 +1,46 @@
-//! Synapsis Domain Ports
+use crate::domain::entities::{MemoryEntry, SessionInfo};
+use crate::domain::types::ObservationId;
 
-use super::entities::SearchParams;
-use super::errors::{Result, SynapsisError};
-use super::types::*;
+/// Low-level storage backend abstraction supporting multiple database engines.
+pub trait StorageBackend: Send + Sync {
+    fn execute(&self, sql: &str, params: &[rusqlite::types::Value]) -> Result<u64, String>;
+    fn query(&self, sql: &str, params: &[rusqlite::types::Value]) -> Result<Vec<Vec<rusqlite::types::Value>>, String>;
+    fn execute_batch(&self, sql: &str) -> Result<(), String>;
+    fn as_any(&self) -> &dyn std::any::Any;
+}
 
 pub trait StoragePort: Send + Sync {
-    fn init(&self) -> Result<()>;
-    fn get_observation(&self, id: ObservationId) -> Result<Option<super::entities::Observation>>;
-    fn save_observation(&self, obs: &super::entities::Observation) -> Result<ObservationId>;
-    fn search_observations(
-        &self,
-        params: &SearchParams,
-    ) -> Result<Vec<super::entities::SearchResult>>;
-    fn get_timeline(&self, limit: i32) -> Result<Vec<super::entities::TimelineEntry>>;
-}
-
-pub trait SessionPort: Send + Sync {
-    fn start_session(&self, project: &str, directory: &str) -> Result<SessionId>;
-    fn end_session(&self, id: &SessionId, summary: Option<String>) -> Result<()>;
-    fn list_sessions(&self) -> Result<Vec<super::entities::SessionSummary>>;
-}
-
-pub trait SyncPort: Send + Sync {
-    fn get_status(&self) -> Result<SyncStatus>;
+    fn save_observation(&self, obs: &Observation) -> Result<ObservationId, String>;
+    fn search_observations(&self, params: &SearchParams) -> Result<Vec<SearchResult>, String>;
+    fn recent_observations(&self, limit: usize) -> Result<Vec<Observation>, String>;
+    fn get_by_id(&self, id: i64) -> Result<Option<Observation>, String>;
+    fn delete(&self, id: i64) -> Result<(), String>;
 }
 
 pub trait MemoryPort: Send + Sync {
-    fn save_memory(&self, memory: &super::entities::Memory) -> Result<()>;
-    fn get_memories(
-        &self,
-        agent_id: &str,
-        session_id: Option<&str>,
-    ) -> Result<Vec<super::entities::Memory>>;
-    fn clear_memories(&self, agent_id: &str, session_id: Option<&str>) -> Result<()>;
+    fn save_memory(&self, memory: &MemoryEntry) -> Result<(), String>;
+    fn search_fts(&self, query: &str, project: Option<&str>, limit: i32, max_tokens: Option<u32>) -> Result<Vec<serde_json::Value>, String>;
+    fn retain(&self, max_tokens: u64) -> Result<u64, String>;  // evict lowest-priority entries, return freed tokens
+    fn stats(&self) -> Result<MemoryStats, String>;
 }
 
-pub trait ExportPort: Send + Sync {
-    fn export_all(&self) -> Result<String>;
-    fn import_data(&self, data: &str) -> Result<i64>;
-}
+use crate::domain::types::SessionId;
 
-#[derive(Debug, Clone)]
-pub enum AuditOperation {
-    Create,
-    Read,
-    Update,
-    Delete,
-    Search,
-    SessionStart,
-    SessionEnd,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryStats {
+    pub total_entries: u64,
+    pub total_tokens: u64,
+    pub avg_importance: f32,
+    pub unique_sessions: u64,
 }
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
-pub struct AuditEntry {
-    pub timestamp: Timestamp,
-    pub operation: AuditOperation,
-    pub resource: String,
-    pub agent_id: Option<String>,
-}
+pub use crate::domain::types::ObservationType;
+pub use crate::domain::entities::Observation;
+pub use crate::domain::entities::SearchParams;
+pub use crate::domain::entities::SearchResult;
+pub use crate::domain::models::agent::AgentStatus;
 
-pub fn from_json<T: serde::de::DeserializeOwned>(json: &str) -> Result<T> {
-    serde_json::from_str(json).map_err(|_| SynapsisError::validation_malformed_json())
-}
-
-pub fn to_json<T: serde::Serialize>(value: &T) -> Result<String> {
-    serde_json::to_string_pretty(value).map_err(|e| SynapsisError::internal_bug(e.to_string()))
-}
+// Legacy compatibility stubs
+pub trait SessionPort: Send + Sync {}
+impl SessionPort for crate::infrastructure::database::Database {}
