@@ -23,7 +23,7 @@ rusqlite = { version = "0.31", features = ["bundled-sqlcipher", "blob", "serde_j
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "1.0"
 uuid = { version = "1.0", features = ["v4", "fast-rng"] }
-rand = "0.8"
+rand = "0.10"
 sha2 = "0.10"
 aes-gcm = "0.10"
 chacha20poly1305 = "0.10"
