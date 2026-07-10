@@ -1,0 +1,18 @@
+# Auto-label PRs by changed files
+'feat':
+  - src/**/*.rs
+  - Cargo.toml
+
+'fix':
+  - src/**/*.rs
+
+'docs':
+  - '**/*.md'
+  - '**/docs/**'
+
+'ci':
+  - .github/workflows/**/*
+  - .github/**/*
+
+'test':
+  - tests/**/*

@@ -1,0 +1,8 @@
+# Default owners for everything
+* @MethodWhite
+
+# Core library
+src/* @MethodWhite
+
+# Security
+SECURITY.md @MethodWhite
