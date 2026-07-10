@@ -1313,7 +1313,6 @@ dependencies = [
  "deadpool-postgres",
  "futures",
  "hex",
- "lazy_static",
  "pqcrypto-mldsa",
  "pqcrypto-mlkem",
  "rand 0.8.6",
