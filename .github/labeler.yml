@@ -1,10 +1,11 @@
 core:
-  - any: ['src/core/**/*']
+  - src/core/**/*
 db:
-  - any: ['src/infrastructure/database/**/*']
+  - src/infrastructure/database/**/*
 ci:
-  - any: ['.github/**/*']
+  - .github/**/*
 docs:
-  - any: ['**/*.md', 'docs/**/*']
+  - '**/*.md'
+  - docs/**/*
 test:
-  - any: ['tests/**/*']
+  - tests/**/*
