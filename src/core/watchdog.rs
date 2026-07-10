@@ -1,3 +1,7 @@
+#[derive(Debug, Clone)]
+// TODO: Implement filesystem integrity monitoring.
+// Currently a stub — no files are actually watched.
+
 pub struct FilesystemWatchdog;
 impl FilesystemWatchdog {
     pub fn new(_config: WatchdogConfig) -> Self {
@@ -6,6 +10,7 @@ impl FilesystemWatchdog {
     pub fn start_monitoring(&self) {}
     pub fn stop_monitoring(&self) {}
 }
+#[derive(Debug, Clone)]
 pub struct WatchdogConfig;
 impl Default for WatchdogConfig {
     fn default() -> Self {
@@ -15,6 +20,7 @@ impl Default for WatchdogConfig {
 pub mod mcp_tools {
     use super::FilesystemWatchdog;
     use serde_json::{json, Value};
+    #[derive(Debug, Clone)]
     pub struct McpWatchdogAdapter;
     impl McpWatchdogAdapter {
         pub fn new(_watchdog: FilesystemWatchdog) -> Self {

@@ -1,4 +1,8 @@
 use serde_json::Value;
+#[derive(Debug, Clone)]
+// TODO: Implement multi-agent orchestration logic.
+// Currently a stub — all methods return defaults.
+
 pub struct Orchestrator;
 impl Orchestrator {
     pub fn new() -> Self {

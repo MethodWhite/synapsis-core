@@ -1,4 +1,5 @@
 use serde_json::Value;
+#[derive(Debug, Clone, Default)]
 pub struct SkillsRegistry;
 impl SkillsRegistry {
     pub fn new() -> Self {

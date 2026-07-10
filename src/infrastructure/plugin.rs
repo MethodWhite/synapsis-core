@@ -1,4 +1,5 @@
 use crate::domain::plugin::{PluginInfo, PluginManager as DomainPluginManager};
+#[derive(Debug, Clone)]
 pub struct PluginManager(pub DomainPluginManager);
 impl PluginManager {
     pub fn new() -> Self {

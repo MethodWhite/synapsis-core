@@ -2,6 +2,7 @@
 ///
 /// Provides post-quantum secure key encapsulation for establishing
 /// shared secrets between two parties.
+#[derive(Debug, Clone, Default)]
 pub struct MlKem;
 impl MlKem {
     pub fn new() -> Self {

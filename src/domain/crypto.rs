@@ -22,8 +22,10 @@ pub trait CryptoProvider: Send + Sync {
         Ok(vec![])
     }
 }
+#[derive(Debug, Clone, Default)]
 pub struct DefaultCryptoProvider;
 impl CryptoProvider for DefaultCryptoProvider {}
+#[derive(Debug, Clone, Default)]
 pub struct PqcryptoProvider;
 impl PqcryptoProvider {
     pub fn new() -> Self {
