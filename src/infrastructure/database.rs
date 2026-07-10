@@ -1457,7 +1457,7 @@ pub(crate) fn get_f64(v: &rusqlite::types::Value) -> Option<f64> {
     }
 }
 
-pub(crate) fn get_str<'a>(v: &'a rusqlite::types::Value) -> Option<&'a str> {
+pub fn get_str<'a>(v: &'a rusqlite::types::Value) -> Option<&'a str> {
     match v {
         rusqlite::types::Value::Text(s) => Some(s.as_str()),
         _ => None,
