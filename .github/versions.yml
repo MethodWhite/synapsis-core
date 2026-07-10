@@ -1,0 +1,16 @@
+# Centralized action versions
+# Update here to change version across all workflows
+actions:
+  checkout: v4
+  labeler: v6
+  rust-toolchain: stable
+  rust-cache: v2
+  upload-artifact: v4
+  github-script: v7
+  auto-approve: v4
+  wait-for-checks: v0.5.0
+  audit-check: v2.0.0
+  actionlint: v1
+  stale: v9
+  release-please: v4
+  gitleaks: v2
