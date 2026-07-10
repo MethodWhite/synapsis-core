@@ -15,19 +15,29 @@ pub enum DbValue {
 }
 
 impl From<String> for DbValue {
-    fn from(s: String) -> Self { DbValue::Text(s) }
+    fn from(s: String) -> Self {
+        DbValue::Text(s)
+    }
 }
 impl From<&str> for DbValue {
-    fn from(s: &str) -> Self { DbValue::Text(s.to_string()) }
+    fn from(s: &str) -> Self {
+        DbValue::Text(s.to_string())
+    }
 }
 impl From<i64> for DbValue {
-    fn from(n: i64) -> Self { DbValue::Integer(n) }
+    fn from(n: i64) -> Self {
+        DbValue::Integer(n)
+    }
 }
 impl From<f64> for DbValue {
-    fn from(f: f64) -> Self { DbValue::Real(f) }
+    fn from(f: f64) -> Self {
+        DbValue::Real(f)
+    }
 }
 impl From<Vec<u8>> for DbValue {
-    fn from(b: Vec<u8>) -> Self { DbValue::Blob(b) }
+    fn from(b: Vec<u8>) -> Self {
+        DbValue::Blob(b)
+    }
 }
 
 /// Low-level storage backend abstraction supporting multiple database engines.
@@ -58,7 +68,6 @@ pub trait MemoryPort: Send + Sync {
     fn retain(&self, max_tokens: u64) -> Result<u64, String>; // evict lowest-priority entries, return freed tokens
     fn stats(&self) -> Result<MemoryStats, String>;
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryStats {

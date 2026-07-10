@@ -265,7 +265,12 @@ fn test_relation_inference() {
 
     let db = setup_db();
     let session = SessionId::new("test");
-    let obs = Observation::new(session.clone(), ObservationType::Note, "Relation test", text);
+    let obs = Observation::new(
+        session.clone(),
+        ObservationType::Note,
+        "Relation test",
+        text,
+    );
     db.save_observation(&obs).unwrap();
 
     let all_entities = db.entity_search("", None).unwrap();
@@ -292,9 +297,18 @@ fn test_semantic_search_ranking() {
     let session = SessionId::new("test");
 
     let themes = vec![
-        ("trading system", "algorithmic trading with machine learning and neural networks for market prediction"),
-        ("weather data", "temperature and precipitation forecasts for the next week"),
-        ("recipe book", "cooking instructions for Italian pasta and pizza dishes"),
+        (
+            "trading system",
+            "algorithmic trading with machine learning and neural networks for market prediction",
+        ),
+        (
+            "weather data",
+            "temperature and precipitation forecasts for the next week",
+        ),
+        (
+            "recipe book",
+            "cooking instructions for Italian pasta and pizza dishes",
+        ),
     ];
 
     for (title, content) in &themes {
@@ -303,10 +317,7 @@ fn test_semantic_search_ranking() {
     }
 
     let results = db
-        .search_observations(
-            &SearchParams::new("machine learning for finance")
-                .with_semantic(true),
-        )
+        .search_observations(&SearchParams::new("machine learning for finance").with_semantic(true))
         .unwrap();
 
     assert!(!results.is_empty(), "semantic search should return results");

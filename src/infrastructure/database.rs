@@ -1,10 +1,11 @@
 use crate::domain::entities::{
-    compute_chunks, compute_embedding, cosine_similarity, extract_entities, infer_relationships, summarize, Entity, EntityType,
-    MemoryEntry, Observation, Relation, RelationType, SearchParams, SearchResult, SessionInfo,
+    compute_chunks, compute_embedding, cosine_similarity, extract_entities, infer_relationships,
+    summarize, Entity, EntityType, MemoryEntry, Observation, Relation, RelationType, SearchParams,
+    SearchResult, SessionInfo,
 };
-use crate::domain::ports::StoragePort;
 use crate::domain::ports::DbValue;
 use crate::domain::ports::StorageBackend;
+use crate::domain::ports::StoragePort;
 use crate::domain::types::{ObservationId, ObservationType};
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -62,11 +63,7 @@ impl StorageBackend for SqliteBackend {
             .map_err(|e| e.to_string())
     }
 
-    fn query(
-        &self,
-        sql: &str,
-        params: &[DbValue],
-    ) -> Result<Vec<Vec<DbValue>>, String> {
+    fn query(&self, sql: &str, params: &[DbValue]) -> Result<Vec<Vec<DbValue>>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
         let col_count = stmt.column_count();
@@ -75,7 +72,9 @@ impl StorageBackend for SqliteBackend {
             .query_map(rusqlite::params_from_iter(rp.iter()), |row| {
                 let mut values = Vec::with_capacity(col_count);
                 for i in 0..col_count {
-                    values.push(rusqlite_to_dbvalue(&row.get::<_, rusqlite::types::Value>(i)?));
+                    values.push(rusqlite_to_dbvalue(
+                        &row.get::<_, rusqlite::types::Value>(i)?,
+                    ));
                 }
                 Ok(values)
             })
@@ -137,11 +136,7 @@ impl StorageBackend for PgBackend {
             .map_err(|e| e.to_string())
     }
 
-    fn query(
-        &self,
-        sql: &str,
-        params: &[DbValue],
-    ) -> Result<Vec<Vec<DbValue>>, String> {
+    fn query(&self, sql: &str, params: &[DbValue]) -> Result<Vec<Vec<DbValue>>, String> {
         let client = self
             .rt
             .block_on(self.pool.get())
@@ -186,27 +181,15 @@ impl StorageBackend for PgBackend {
 }
 
 #[cfg(feature = "postgres")]
-fn pg_params_from_values(
-    params: &[DbValue],
-) -> Vec<Box<dyn tokio_postgres::types::ToSql + Sync>> {
+fn pg_params_from_values(params: &[DbValue]) -> Vec<Box<dyn tokio_postgres::types::ToSql + Sync>> {
     params
         .iter()
         .map(|v| match v {
-            DbValue::Null => {
-                Box::new(None::<i64>) as Box<dyn tokio_postgres::types::ToSql + Sync>
-            }
-            DbValue::Integer(i) => {
-                Box::new(*i) as Box<dyn tokio_postgres::types::ToSql + Sync>
-            }
-            DbValue::Real(f) => {
-                Box::new(*f) as Box<dyn tokio_postgres::types::ToSql + Sync>
-            }
-            DbValue::Text(s) => {
-                Box::new(s.clone()) as Box<dyn tokio_postgres::types::ToSql + Sync>
-            }
-            DbValue::Blob(b) => {
-                Box::new(b.clone()) as Box<dyn tokio_postgres::types::ToSql + Sync>
-            }
+            DbValue::Null => Box::new(None::<i64>) as Box<dyn tokio_postgres::types::ToSql + Sync>,
+            DbValue::Integer(i) => Box::new(*i) as Box<dyn tokio_postgres::types::ToSql + Sync>,
+            DbValue::Real(f) => Box::new(*f) as Box<dyn tokio_postgres::types::ToSql + Sync>,
+            DbValue::Text(s) => Box::new(s.clone()) as Box<dyn tokio_postgres::types::ToSql + Sync>,
+            DbValue::Blob(b) => Box::new(b.clone()) as Box<dyn tokio_postgres::types::ToSql + Sync>,
         })
         .collect()
 }
@@ -514,10 +497,7 @@ impl Database {
         let blob = serialize_embedding(&embedding);
         self.backend.execute(
             "INSERT OR REPLACE INTO embeddings (observation_id, vector) VALUES (?1, ?2)",
-            &[
-                DbValue::Integer(id),
-                DbValue::Blob(blob),
-            ],
+            &[DbValue::Integer(id), DbValue::Blob(blob)],
         )?;
         let mut obs_clone = obs.clone();
         obs_clone.id = ObservationId::new(id);
@@ -738,10 +718,7 @@ impl Database {
                      FROM chunks c JOIN observations o ON c.observation_id = o.id
                      WHERE LOWER(c.content) LIKE ?1 AND o.importance >= ?2
                      ORDER BY c.id",
-                    &[
-                        DbValue::Text(like),
-                        DbValue::Real(min_imp as f64),
-                    ],
+                    &[DbValue::Text(like), DbValue::Real(min_imp as f64)],
                 )?;
                 let mut obs_chunks: std::collections::HashMap<i64, Vec<u64>> =
                     std::collections::HashMap::new();
@@ -821,10 +798,12 @@ impl Database {
     }
 
     fn delete_impl(&self, id: i64) -> Result<(), String> {
-        self.backend.execute(
-            "DELETE FROM observations_fts WHERE rowid = ?1",
-            &[DbValue::Integer(id)],
-        ).ok();
+        self.backend
+            .execute(
+                "DELETE FROM observations_fts WHERE rowid = ?1",
+                &[DbValue::Integer(id)],
+            )
+            .ok();
         self.backend.execute(
             "DELETE FROM observations WHERE id = ?1",
             &[DbValue::Integer(id)],
@@ -933,10 +912,8 @@ impl Database {
                 ],
             )?
         } else {
-            self.backend.query(
-                &sql,
-                &[DbValue::Text(query.to_string())],
-            )?
+            self.backend
+                .query(&sql, &[DbValue::Text(query.to_string())])?
         };
 
         let mut results = Vec::new();
@@ -1197,10 +1174,7 @@ impl Database {
     pub fn update_summary(&self, id: ObservationId, summary: &str) -> Result<(), String> {
         self.backend.execute(
             "UPDATE observations SET summary = ?1 WHERE id = ?2",
-            &[
-                DbValue::Text(summary.to_string()),
-                DbValue::Integer(id.0),
-            ],
+            &[DbValue::Text(summary.to_string()), DbValue::Integer(id.0)],
         )?;
         Ok(())
     }
@@ -1396,10 +1370,7 @@ impl Database {
                     "SELECT id, name, entity_type, aliases, mention_count, first_seen, last_seen
                       FROM entities WHERE (name LIKE ?1 OR aliases LIKE ?1) AND entity_type = ?2"
                 ),
-                vec![
-                    DbValue::Text(like),
-                    DbValue::Text(format!("{:?}", et)),
-                ],
+                vec![DbValue::Text(like), DbValue::Text(format!("{:?}", et))],
             )
         } else {
             (
@@ -1545,7 +1516,10 @@ fn parse_obs_type(s: &str) -> ObservationType {
         "Architecture" => ObservationType::Architecture,
         "Discovery" => ObservationType::Discovery,
         _ => {
-            eprintln!("[synapsis-core] Warning: unknown ObservationType '{}', defaulting to Note", s);
+            eprintln!(
+                "[synapsis-core] Warning: unknown ObservationType '{}', defaulting to Note",
+                s
+            );
             ObservationType::Note
         }
     }
