@@ -1,5 +1,9 @@
+// TODO: Implement anti-brick command validation.
+// All methods are currently stubs returning safe defaults.
+
 /// Legacy alias
 pub type AntiBrickEngine = AntiBrick;
+#[derive(Debug, Clone)]
 pub struct AntiBrickConfig {
     pub max_args: usize,
     pub blocked_patterns: Vec<String>,
@@ -12,6 +16,7 @@ impl Default for AntiBrickConfig {
         }
     }
 }
+#[derive(Debug, Clone)]
 pub struct AntiBrick {
     #[allow(dead_code)]
     enabled: bool,
@@ -28,6 +33,7 @@ pub mod mcp_tools {
     use super::AntiBrick;
     use serde_json::{json, Value};
     use std::sync::Arc;
+    #[derive(Debug, Clone)]
     pub struct McpAntiBrickAdapter;
     impl McpAntiBrickAdapter {
         pub fn new(_anti_brick: AntiBrick) -> Self {

@@ -2,6 +2,7 @@
 ///
 /// Provides post-quantum secure digital signatures for message
 /// authentication and non-repudiation.
+#[derive(Debug, Clone, Default)]
 pub struct MlDsa;
 impl MlDsa {
     pub fn new() -> Self {

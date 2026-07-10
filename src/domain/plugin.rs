@@ -8,6 +8,7 @@ pub struct PluginInfo {
     pub description: String,
     pub enabled: bool,
 }
+#[derive(Debug, Clone)]
 pub struct PluginManager {
     plugins: HashMap<String, PluginInfo>,
 }

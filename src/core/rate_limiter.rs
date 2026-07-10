@@ -1,4 +1,8 @@
+// TODO: Implement token-bucket or sliding-window rate limiter.
+// Currently allows all requests through.
+
 use std::time::Instant;
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct RateLimiter {
     last_check: Instant,

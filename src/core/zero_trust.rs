@@ -1,4 +1,8 @@
 use serde_json::Value;
+#[derive(Debug, Clone)]
+// TODO: Implement zero-trust authorization with policy evaluation.
+// Currently allows all requests.
+
 pub struct ZeroTrustGate;
 impl ZeroTrustGate {
     pub fn new() -> Self {

@@ -2,6 +2,7 @@ use crate::infrastructure::database::Database;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+#[derive(Debug, Clone)]
 pub struct SessionCleanupConfig {
     pub max_age_secs: i64,
     pub interval_secs: u64,
@@ -22,11 +23,13 @@ impl Default for SessionCleanupConfig {
         }
     }
 }
+#[derive(Debug, Clone)]
 pub struct CleanupStats {
     pub removed: usize,
     pub active: usize,
 }
 
+#[derive(Debug, Clone)]
 pub struct SessionCleanupJob {
     running: Arc<AtomicBool>,
 }
