@@ -18,6 +18,5 @@ jobs:
       - uses: googleapis/release-please-action@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          release-type: rust
-          bump-minor-pre-major: true
-          pull-request-title-pattern: "chore: release ${version}"
+          config-file: .github/release-please-config.json
+          manifest-file: .release-please-manifest.json
