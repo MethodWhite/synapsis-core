@@ -8,7 +8,12 @@ pub enum DomainError {
 }
 impl fmt::Display for DomainError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self { DomainError::InvalidInput(m) | DomainError::NotFound(m) | DomainError::Conflict(m) | DomainError::Storage(m) => write!(f, "{}", m) }
+        match self {
+            DomainError::InvalidInput(m)
+            | DomainError::NotFound(m)
+            | DomainError::Conflict(m)
+            | DomainError::Storage(m) => write!(f, "{}", m),
+        }
     }
 }
 impl std::error::Error for DomainError {}

@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::domain::types::{ObservationId, ObservationType, SessionId, Timestamp};
+use serde::{Deserialize, Serialize};
 
 /// Token-efficient memory entry with importance scoring and automatic summarization.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -7,19 +7,24 @@ pub struct Observation {
     pub id: ObservationId,
     pub session_id: String,
     pub title: String,
-    pub summary: String,         // compressed/summarized version for token efficiency
-    pub content: String,          // full content (can be empty if summary is sufficient)
+    pub summary: String, // compressed/summarized version for token efficiency
+    pub content: String, // full content (can be empty if summary is sufficient)
     pub project: Option<String>,
     pub tags: Vec<String>,
     pub created_at: Timestamp,
     pub observation_type: ObservationType,
-    pub importance: f32,          // 0.0-1.0 priority score
-    pub token_count: u32,         // estimated tokens in content+title
-    pub access_count: u64,        // times retrieved
+    pub importance: f32,   // 0.0-1.0 priority score
+    pub token_count: u32,  // estimated tokens in content+title
+    pub access_count: u64, // times retrieved
 }
 
 impl Observation {
-    pub fn new(session_id: SessionId, obs_type: ObservationType, title: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn new(
+        session_id: SessionId,
+        obs_type: ObservationType,
+        title: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
         let title = title.into();
         let content = content.into();
         let token_count = estimate_tokens(&title) + estimate_tokens(&content);
@@ -27,7 +32,7 @@ impl Observation {
         Self {
             id: ObservationId(0i64),
             session_id: session_id.instance_uuid,
-            summary: summarize(&title, &content, 50),  // 50 token summary
+            summary: summarize(&title, &content, 50), // 50 token summary
             content,
             title,
             project: None,
@@ -68,7 +73,7 @@ pub struct SearchParams {
     pub query: String,
     pub project: Option<String>,
     pub limit: Option<i64>,
-    pub max_tokens: Option<u32>,    // token budget for results
+    pub max_tokens: Option<u32>,     // token budget for results
     pub min_importance: Option<f32>, // minimum importance filter
     pub obs_type: Option<ObservationType>,
     pub scope: Option<String>,
@@ -107,7 +112,9 @@ impl SearchParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TimelineEntry { pub observation: Observation }
+pub struct TimelineEntry {
+    pub observation: Observation,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
@@ -119,7 +126,9 @@ pub struct SearchResult {
 
 impl std::ops::Deref for SearchResult {
     type Target = Observation;
-    fn deref(&self) -> &Observation { &self.observation }
+    fn deref(&self) -> &Observation {
+        &self.observation
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,7 +137,7 @@ pub struct SessionInfo {
     pub started_at: Timestamp,
     pub ended_at: Option<Timestamp>,
     pub observation_count: i64,
-    pub total_tokens: u64,     // total tokens stored
+    pub total_tokens: u64, // total tokens stored
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,7 +160,12 @@ pub struct MemoryEntry {
 impl MemoryEntry {
     pub fn new(session_id: SessionId, content: String) -> Self {
         let tc = estimate_tokens(&content) as u32;
-        Self { session_id, content, importance: 0.5, token_count: tc }
+        Self {
+            session_id,
+            content,
+            importance: 0.5,
+            token_count: tc,
+        }
     }
 }
 
@@ -161,8 +175,16 @@ pub type EntityId = u64;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EntityType {
-    Person, Organization, Location, Concept, Technology,
-    Project, Language, Tool, Protocol, Topic,
+    Person,
+    Organization,
+    Location,
+    Concept,
+    Technology,
+    Project,
+    Language,
+    Tool,
+    Protocol,
+    Topic,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,9 +201,19 @@ pub struct Entity {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RelationType {
-    Mentions, Depends, Implements, Extends,
-    Uses, PartOf, Related, Creates, Modifies,
-    Similar, Opposite, Specializes, Example,
+    Mentions,
+    Depends,
+    Implements,
+    Extends,
+    Uses,
+    PartOf,
+    Related,
+    Creates,
+    Modifies,
+    Similar,
+    Opposite,
+    Specializes,
+    Example,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,7 +234,10 @@ pub fn extract_entities(text: &str) -> Vec<(String, EntityType)> {
     let mut entities: Vec<(String, EntityType)> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
 
-    let add = |entities: &mut Vec<(String, EntityType)>, seen: &mut HashSet<String>, name: String, typ: EntityType| {
+    let add = |entities: &mut Vec<(String, EntityType)>,
+               seen: &mut HashSet<String>,
+               name: String,
+               typ: EntityType| {
         let key = name.to_lowercase();
         if seen.insert(key) {
             entities.push((name, typ));
@@ -211,14 +246,54 @@ pub fn extract_entities(text: &str) -> Vec<(String, EntityType)> {
 
     // Language keywords
     let lang_set: HashSet<&str> = [
-        "rust", "python", "javascript", "typescript", "golang", "go",
-        "java", "c++", "c#", "csharp", "ruby", "php", "swift",
-        "kotlin", "scala", "perl", "haskell", "clojure", "elixir",
-        "erlang", "lua", "dart", "r", "matlab", "bash", "zsh",
-        "zig", "nim", "fortran", "cobol", "ada", "prolog", "lisp",
-        "ocaml", "f#", "fsharp", "julia", "delphi", "solidity",
-        "vyper", "move", "racket", "scheme", "tcl",
-    ].iter().copied().collect();
+        "rust",
+        "python",
+        "javascript",
+        "typescript",
+        "golang",
+        "go",
+        "java",
+        "c++",
+        "c#",
+        "csharp",
+        "ruby",
+        "php",
+        "swift",
+        "kotlin",
+        "scala",
+        "perl",
+        "haskell",
+        "clojure",
+        "elixir",
+        "erlang",
+        "lua",
+        "dart",
+        "r",
+        "matlab",
+        "bash",
+        "zsh",
+        "zig",
+        "nim",
+        "fortran",
+        "cobol",
+        "ada",
+        "prolog",
+        "lisp",
+        "ocaml",
+        "f#",
+        "fsharp",
+        "julia",
+        "delphi",
+        "solidity",
+        "vyper",
+        "move",
+        "racket",
+        "scheme",
+        "tcl",
+    ]
+    .iter()
+    .copied()
+    .collect();
 
     // Tech keywords (non-language)
     let tech_map: Vec<(&str, EntityType)> = vec![
@@ -261,10 +336,25 @@ pub fn extract_entities(text: &str) -> Vec<(String, EntityType)> {
 
     // Project-indicator words
     let project_indicators: HashSet<&str> = [
-        "project", "system", "framework", "platform", "toolkit",
-        "library", "engine", "service", "pipeline", "protocol",
-        "infrastructure", "module", "package", "sdk", "api",
-    ].iter().copied().collect();
+        "project",
+        "system",
+        "framework",
+        "platform",
+        "toolkit",
+        "library",
+        "engine",
+        "service",
+        "pipeline",
+        "protocol",
+        "infrastructure",
+        "module",
+        "package",
+        "sdk",
+        "api",
+    ]
+    .iter()
+    .copied()
+    .collect();
 
     let mut i = 0;
     let words: Vec<&str> = text.split_whitespace().collect();
@@ -273,14 +363,21 @@ pub fn extract_entities(text: &str) -> Vec<(String, EntityType)> {
 
         // URL → Tool
         if token.starts_with("http://") || token.starts_with("https://") {
-            add(&mut entities, &mut seen, token.to_string(), EntityType::Tool);
+            add(
+                &mut entities,
+                &mut seen,
+                token.to_string(),
+                EntityType::Tool,
+            );
             i += 1;
             continue;
         }
 
         // @mention → Person
         if token.starts_with('@') && token.len() > 1 {
-            let name = token[1..].trim_end_matches(|c: char| !c.is_alphanumeric()).to_string();
+            let name = token[1..]
+                .trim_end_matches(|c: char| !c.is_alphanumeric())
+                .to_string();
             if !name.is_empty() {
                 add(&mut entities, &mut seen, name, EntityType::Person);
             }
@@ -289,13 +386,24 @@ pub fn extract_entities(text: &str) -> Vec<(String, EntityType)> {
         }
 
         // Check single-token keywords
-        let clean = token.trim_end_matches(|c: char| matches!(c, '.' | ',' | '!' | '?' | ';' | ':' | '"' | '\'' | ')' | ']' | '}' | '>'))
+        let clean = token
+            .trim_end_matches(|c: char| {
+                matches!(
+                    c,
+                    '.' | ',' | '!' | '?' | ';' | ':' | '"' | '\'' | ')' | ']' | '}' | '>'
+                )
+            })
             .trim_start_matches(|c: char| matches!(c, '"' | '\'' | '(' | '[' | '{' | '<'))
             .to_lowercase();
         if !clean.is_empty() {
             // Language check first (more specific)
             if lang_set.contains(clean.as_str()) {
-                add(&mut entities, &mut seen, clean.clone(), EntityType::Language);
+                add(
+                    &mut entities,
+                    &mut seen,
+                    clean.clone(),
+                    EntityType::Language,
+                );
                 i += 1;
                 continue;
             }
@@ -308,18 +416,32 @@ pub fn extract_entities(text: &str) -> Vec<(String, EntityType)> {
         }
 
         // Capitalized multi-word phrases → Concept or Project
-        let trim_punct = |c: char| matches!(c, '.' | ',' | '!' | '?' | ';' | ':' | '"' | '\'' | ')' | ']' | '}' | '>');
+        let trim_punct = |c: char| {
+            matches!(
+                c,
+                '.' | ',' | '!' | '?' | ';' | ':' | '"' | '\'' | ')' | ']' | '}' | '>'
+            )
+        };
         let trim_leading = |c: char| matches!(c, '"' | '\'' | '(' | '[' | '{' | '<');
         let trimmed_token: &str = token.trim_start_matches(trim_leading);
         let trimmed_clean = trimmed_token.trim_end_matches(trim_punct);
-        let starts_upper = trimmed_clean.chars().next().map_or(false, |c| c.is_uppercase());
-        if starts_upper && !trimmed_clean.is_empty() && trimmed_clean.chars().all(|c| c.is_alphanumeric() || c == '-') {
+        let starts_upper = trimmed_clean
+            .chars()
+            .next()
+            .map_or(false, |c| c.is_uppercase());
+        if starts_upper
+            && !trimmed_clean.is_empty()
+            && trimmed_clean
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '-')
+        {
             let mut phrase = trimmed_clean.to_string();
             let mut j = i + 1;
             while j < words.len() {
                 let next = words[j];
-                let next_trimmed = next.trim_start_matches(trim_leading)
-                                       .trim_end_matches(trim_punct);
+                let next_trimmed = next
+                    .trim_start_matches(trim_leading)
+                    .trim_end_matches(trim_punct);
                 let next_clean = next_trimmed.to_lowercase();
                 // Stop before standalone keywords (language or tech) so they're detected separately
                 if lang_set.contains(next_clean.as_str())
@@ -328,8 +450,13 @@ pub fn extract_entities(text: &str) -> Vec<(String, EntityType)> {
                     break;
                 }
                 if next_trimmed.len() > 1
-                    && next_trimmed.chars().next().map_or(false, |c| c.is_uppercase())
-                    && next_trimmed.chars().all(|c| c.is_alphanumeric() || c == '-')
+                    && next_trimmed
+                        .chars()
+                        .next()
+                        .map_or(false, |c| c.is_uppercase())
+                    && next_trimmed
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || c == '-')
                 {
                     phrase.push(' ');
                     phrase.push_str(next_trimmed);
@@ -340,7 +467,10 @@ pub fn extract_entities(text: &str) -> Vec<(String, EntityType)> {
             }
             if j > i + 1 {
                 let lower_phrase = phrase.to_lowercase();
-                let typ = if project_indicators.iter().any(|pi| lower_phrase.contains(pi)) {
+                let typ = if project_indicators
+                    .iter()
+                    .any(|pi| lower_phrase.contains(pi))
+                {
                     EntityType::Project
                 } else {
                     EntityType::Concept
@@ -359,12 +489,16 @@ pub fn extract_entities(text: &str) -> Vec<(String, EntityType)> {
 
 /// Infer relationships between entities based on sentence-level co-occurrence and keywords.
 /// Returns (source_index, target_index, relation_type, weight).
-pub fn infer_relationships(text: &str, entities: &[(String, EntityType)]) -> Vec<(usize, usize, RelationType, f32)> {
+pub fn infer_relationships(
+    text: &str,
+    entities: &[(String, EntityType)],
+) -> Vec<(usize, usize, RelationType, f32)> {
     if entities.len() < 2 {
         return vec![];
     }
 
-    let sentences: Vec<&str> = text.split(|c: char| c == '.' || c == '!' || c == '?')
+    let sentences: Vec<&str> = text
+        .split(|c: char| c == '.' || c == '!' || c == '?')
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .collect();
@@ -440,7 +574,9 @@ pub fn estimate_tokens(text: &str) -> usize {
 pub fn summarize(title: &str, content: &str, max_tokens: usize) -> String {
     let full = format!("{}: {}", title, content);
     let estimated = estimate_tokens(&full);
-    if estimated <= max_tokens { return full; }
+    if estimated <= max_tokens {
+        return full;
+    }
 
     // Truncate: keep title + first N chars of content
     let title_tokens = estimate_tokens(title);
@@ -461,8 +597,21 @@ pub fn compute_importance(title: &str, content: &str, _tags: &[&str]) -> f32 {
     let len_score = (content.len() as f32 / 2000.0).min(0.3);
     score += len_score;
     // Title with keywords boosts importance
-    let keywords = ["error", "critical", "important", "memory", "learn", "trade", "signal", "alert"];
-    let kw_score = keywords.iter().filter(|k| title.to_lowercase().contains(*k)).count() as f32 * 0.1;
+    let keywords = [
+        "error",
+        "critical",
+        "important",
+        "memory",
+        "learn",
+        "trade",
+        "signal",
+        "alert",
+    ];
+    let kw_score = keywords
+        .iter()
+        .filter(|k| title.to_lowercase().contains(*k))
+        .count() as f32
+        * 0.1;
     score += kw_score;
     score.min(1.0)
 }
@@ -532,7 +681,11 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
         norm_b += bv * bv;
     }
     let denom = norm_a.sqrt() * norm_b.sqrt();
-    if denom == 0.0 { 0.0 } else { dot / denom }
+    if denom == 0.0 {
+        0.0
+    } else {
+        dot / denom
+    }
 }
 
 pub fn chunk_text(text: &str, max_chunk_tokens: usize) -> Vec<(String, String)> {
@@ -560,7 +713,9 @@ pub fn chunk_text(text: &str, max_chunk_tokens: usize) -> Vec<(String, String)> 
                     split_at = i + 2;
                     break;
                 }
-                if (c == '.' || c == '!' || c == '?') && (i + 1 >= len || chars[i + 1] == ' ' || chars[i + 1] == '\n') {
+                if (c == '.' || c == '!' || c == '?')
+                    && (i + 1 >= len || chars[i + 1] == ' ' || chars[i + 1] == '\n')
+                {
                     split_at = i + 1;
                     break;
                 }

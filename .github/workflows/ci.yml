@@ -17,18 +17,22 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --lib --release 2>&1
+      - run: cargo test --lib --release
+        env:
+          RUST_BACKTRACE: 1
 
   fmt:
     name: Format
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain
         with:
           components: rustfmt
       - run: cargo fmt -- --check
@@ -36,9 +40,10 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain
         with:
           components: clippy
       - run: cargo clippy --all-features
@@ -46,6 +51,7 @@ jobs:
   actionlint:
     name: Validate workflows
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: reviewdog/action-actionlint@v1
@@ -55,6 +61,7 @@ jobs:
   security:
     name: Security audit
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: rustsec/audit-check@v2.0.0

@@ -9,7 +9,11 @@ pub struct AuditEntry {
 }
 pub struct AuditLogger;
 impl AuditLogger {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
     pub fn log(&self, _entry: AuditEntry) {}
-    pub fn query(&self, _limit: i64) -> Vec<AuditEntry> { vec![] }
+    pub fn query(&self, _limit: i64) -> Vec<AuditEntry> {
+        vec![]
+    }
 }

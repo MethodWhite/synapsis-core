@@ -6,10 +6,13 @@ pub mod infrastructure;
 
 #[cfg(test)]
 mod tests {
-    use crate::infrastructure::database::Database;
-    use crate::domain::entities::{Chunk, EntityType, Observation, RelationType, SearchParams, chunk_text, compute_chunks, estimate_tokens, summarize, compute_importance, extract_entities, infer_relationships};
-    use crate::domain::types::{SessionId, ObservationType, ObservationId};
+    use crate::domain::entities::{
+        chunk_text, compute_chunks, compute_importance, estimate_tokens, extract_entities,
+        infer_relationships, summarize, Chunk, EntityType, Observation, RelationType, SearchParams,
+    };
     use crate::domain::ports::{StorageBackend, StoragePort};
+    use crate::domain::types::{ObservationId, ObservationType, SessionId};
+    use crate::infrastructure::database::Database;
     use crate::infrastructure::database::SqliteBackend;
     use crate::infrastructure::optimizer::AutoOptimizer;
 
@@ -61,7 +64,10 @@ mod tests {
     fn test_compute_importance_keyword_boost() {
         let imp_normal = compute_importance("normal title", "short", &[]);
         let imp_key = compute_importance("critical error in memory", "long content here", &[]);
-        assert!(imp_key > imp_normal, "keyword boost should increase importance");
+        assert!(
+            imp_key > imp_normal,
+            "keyword boost should increase importance"
+        );
     }
 
     /// METRIC: Verify that saving and searching respects token budgets
@@ -81,26 +87,43 @@ mod tests {
         }
 
         // Search with tight token budget
-        let results_all = db.search_observations(
-            &crate::domain::entities::SearchParams::new("memory")
-                .with_max_tokens(10000)
-        ).unwrap();
-        let results_tight = db.search_observations(
-            &crate::domain::entities::SearchParams::new("memory")
-                .with_max_tokens(50)
-        ).unwrap();
+        let results_all = db
+            .search_observations(
+                &crate::domain::entities::SearchParams::new("memory").with_max_tokens(10000),
+            )
+            .unwrap();
+        let results_tight = db
+            .search_observations(
+                &crate::domain::entities::SearchParams::new("memory").with_max_tokens(50),
+            )
+            .unwrap();
 
         // Tight budget should return fewer results
-        assert!(results_tight.len() < results_all.len(),
+        assert!(
+            results_tight.len() < results_all.len(),
             "Token budget of 50 should limit results (all={}, tight={})",
-            results_all.len(), results_tight.len());
+            results_all.len(),
+            results_tight.len()
+        );
 
         // METRIC: print token efficiency
         let total_tokens: u32 = results_all.iter().map(|r| r.token_cost).sum();
         let tight_tokens: u32 = results_tight.iter().map(|r| r.token_cost).sum();
-        println!("METRIC: no-budget search: {} results, {} tokens", results_all.len(), total_tokens);
-        println!("METRIC: budget=50 search: {} results, {} tokens", results_tight.len(), tight_tokens);
-        assert!(tight_tokens <= 100, "token budget exceeded: {} > 100", tight_tokens);
+        println!(
+            "METRIC: no-budget search: {} results, {} tokens",
+            results_all.len(),
+            total_tokens
+        );
+        println!(
+            "METRIC: budget=50 search: {} results, {} tokens",
+            results_tight.len(),
+            tight_tokens
+        );
+        assert!(
+            tight_tokens <= 100,
+            "token budget exceeded: {} > 100",
+            tight_tokens
+        );
     }
 
     /// METRIC: Verify importance scoring affects retrieval order
@@ -124,19 +147,23 @@ mod tests {
             db.save_observation(&obs).unwrap();
         }
 
-        let results = db.search_observations(
-            &crate::domain::entities::SearchParams::new("memory")
-        ).unwrap();
+        let results = db
+            .search_observations(&crate::domain::entities::SearchParams::new("memory"))
+            .unwrap();
 
         assert!(!results.is_empty(), "should return results");
         // First result should have highest importance
         for i in 1..results.len() {
-            assert!(results[i-1].observation.importance >= results[i].observation.importance,
-                "results should be ordered by importance descending");
+            assert!(
+                results[i - 1].observation.importance >= results[i].observation.importance,
+                "results should be ordered by importance descending"
+            );
         }
-        println!("METRIC: importance range: {:.2} - {:.2}",
+        println!(
+            "METRIC: importance range: {:.2} - {:.2}",
             results.last().unwrap().observation.importance,
-            results.first().unwrap().observation.importance);
+            results.first().unwrap().observation.importance
+        );
     }
 
     // ── Benchmark tests ───────────────────────────────────────────────────
@@ -165,9 +192,19 @@ mod tests {
         }
 
         let ratio = total_summary_chars as f64 / total_chars as f64;
-        println!("BENCHMARK: Token efficiency ratio (summary/full): {:.2}%", ratio * 100.0);
-        println!("BENCHMARK: Full chars: {}, Summary chars: {}", total_chars, total_summary_chars);
-        assert!(ratio < 0.6, "Summary should be <60% of full content, got {:.2}%", ratio * 100.0);
+        println!(
+            "BENCHMARK: Token efficiency ratio (summary/full): {:.2}%",
+            ratio * 100.0
+        );
+        println!(
+            "BENCHMARK: Full chars: {}, Summary chars: {}",
+            total_chars, total_summary_chars
+        );
+        assert!(
+            ratio < 0.6,
+            "Summary should be <60% of full content, got {:.2}%",
+            ratio * 100.0
+        );
     }
 
     /// BENCHMARK: Search speed — measure average search time across 10 random queries
@@ -175,21 +212,36 @@ mod tests {
     fn benchmark_search_speed() {
         let db = setup_db();
         let topics = [
-            "machine learning", "data processing", "neural network", "memory management",
-            "token optimization", "embedding vectors", "similarity search", "knowledge graph",
-            "entity extraction", "relationship inference", "chunk management", "database query",
-            "importance scoring", "content summarization", "efficient storage",
+            "machine learning",
+            "data processing",
+            "neural network",
+            "memory management",
+            "token optimization",
+            "embedding vectors",
+            "similarity search",
+            "knowledge graph",
+            "entity extraction",
+            "relationship inference",
+            "chunk management",
+            "database query",
+            "importance scoring",
+            "content summarization",
+            "efficient storage",
         ];
 
         // Insert 500 observations with varied content
         for i in 0..500 {
             let topic = topics[i % topics.len()];
-            let content = format!("{} is an important concept in modern systems. ",
-                topic).repeat(5 + (i % 10));
+            let content = format!("{} is an important concept in modern systems. ", topic)
+                .repeat(5 + (i % 10));
             let obs = Observation::new(
                 SessionId::new("bench-speed"),
                 ObservationType::Memory,
-                format!("speed-{}-{}", topic.split_whitespace().next().unwrap_or("topic"), i),
+                format!(
+                    "speed-{}-{}",
+                    topic.split_whitespace().next().unwrap_or("topic"),
+                    i
+                ),
                 content,
             );
             db.save_observation(&obs).unwrap();
@@ -197,22 +249,32 @@ mod tests {
 
         // Time 10 random queries
         let queries = [
-            "machine learning", "data processing", "knowledge graph",
-            "similarity search", "memory management", "entity extraction",
-            "neural network", "database query", "content summarization",
+            "machine learning",
+            "data processing",
+            "knowledge graph",
+            "similarity search",
+            "memory management",
+            "entity extraction",
+            "neural network",
+            "database query",
+            "content summarization",
             "relationship inference",
         ];
 
         let start = std::time::Instant::now();
         for q in &queries {
-            let _ = db.search_observations(
-                &SearchParams::new(*q).with_limit(10)
-            ).unwrap();
+            let _ = db
+                .search_observations(&SearchParams::new(*q).with_limit(10))
+                .unwrap();
         }
         let elapsed = start.elapsed();
         let avg = elapsed.as_micros() as f64 / queries.len() as f64;
-        println!("BENCHMARK: Search speed — {} queries in {:?}, avg {:.0}µs",
-            queries.len(), elapsed, avg);
+        println!(
+            "BENCHMARK: Search speed — {} queries in {:?}, avg {:.0}µs",
+            queries.len(),
+            elapsed,
+            avg
+        );
         assert!(avg < 1_000_000.0, "Average search time should be <1s");
     }
 
@@ -223,7 +285,11 @@ mod tests {
         let content_base = "memory entry about programming languages and frameworks. ";
 
         for i in 0..50 {
-            let content = format!("{}{}", content_base, "extra details for token counting. ".repeat(i));
+            let content = format!(
+                "{}{}",
+                content_base,
+                "extra details for token counting. ".repeat(i)
+            );
             let obs = Observation::new(
                 SessionId::new("bench-budget"),
                 ObservationType::Memory,
@@ -233,12 +299,12 @@ mod tests {
             db.save_observation(&obs).unwrap();
         }
 
-        let wide = db.search_observations(
-            &SearchParams::new("memory").with_max_tokens(1000)
-        ).unwrap();
-        let tight = db.search_observations(
-            &SearchParams::new("memory").with_max_tokens(100)
-        ).unwrap();
+        let wide = db
+            .search_observations(&SearchParams::new("memory").with_max_tokens(1000))
+            .unwrap();
+        let tight = db
+            .search_observations(&SearchParams::new("memory").with_max_tokens(100))
+            .unwrap();
 
         let wide_tokens: u32 = wide.iter().map(|r| r.token_cost).sum();
         let tight_tokens: u32 = tight.iter().map(|r| r.token_cost).sum();
@@ -250,8 +316,10 @@ mod tests {
 
         println!("BENCHMARK: Token budget — wide(1000)={} tokens, tight(100)={} tokens, reduction ratio={:.2}",
             wide_tokens, tight_tokens, ratio);
-        assert!(tight_tokens <= 100 || tight.len() < wide.len(),
-            "Tight budget should reduce token usage");
+        assert!(
+            tight_tokens <= 100 || tight.len() < wide.len(),
+            "Tight budget should reduce token usage"
+        );
     }
 
     /// BENCHMARK: Embedding similarity — Rust results rank higher than Python for "programming language"
@@ -333,43 +401,69 @@ mod tests {
         );
         db.save_observation(&python_obs).unwrap();
 
-        let results = db.search_observations(
-            &SearchParams::new("programming language")
-                .with_semantic(true)
-                .with_limit(110)
-        ).unwrap();
+        let results = db
+            .search_observations(
+                &SearchParams::new("programming language")
+                    .with_semantic(true)
+                    .with_limit(110),
+            )
+            .unwrap();
 
         assert!(!results.is_empty(), "semantic search should return results");
 
         // Find positions of rust and python results
-        let rust_positions: Vec<usize> = results.iter().enumerate()
+        let rust_positions: Vec<usize> = results
+            .iter()
+            .enumerate()
             .filter(|(_, r)| r.observation.title.starts_with("rust-observation-"))
             .map(|(i, _)| i)
             .collect();
-        let python_positions: Vec<usize> = results.iter().enumerate()
+        let python_positions: Vec<usize> = results
+            .iter()
+            .enumerate()
             .filter(|(_, r)| r.observation.title == "python-web-dev")
             .map(|(i, _)| i)
             .collect();
 
-        println!("BENCHMARK: Embedding similarity — {} Rust results, {} Python result in top {}",
-            rust_positions.len(), python_positions.len(), results.len());
+        println!(
+            "BENCHMARK: Embedding similarity — {} Rust results, {} Python result in top {}",
+            rust_positions.len(),
+            python_positions.len(),
+            results.len()
+        );
 
         for (i, &pos) in rust_positions.iter().take(5).enumerate() {
-            println!("BENCHMARK:   Rust result #{} at position {} with score {:.4}",
-                i + 1, pos, results[pos].score);
+            println!(
+                "BENCHMARK:   Rust result #{} at position {} with score {:.4}",
+                i + 1,
+                pos,
+                results[pos].score
+            );
         }
         if let Some(&py_pos) = python_positions.first() {
-            println!("BENCHMARK:   Python result at position {} with score {:.4}",
-                py_pos, results[py_pos].score);
+            println!(
+                "BENCHMARK:   Python result at position {} with score {:.4}",
+                py_pos, results[py_pos].score
+            );
         }
 
         // Verify the best Rust result outranks the Python result
-        if let (Some(&best_rust_pos), Some(&py_pos)) = (rust_positions.first(), python_positions.first()) {
-            assert!(best_rust_pos < py_pos,
-                "Rust results should rank higher than Python for 'programming language' query");
+        if let (Some(&best_rust_pos), Some(&py_pos)) =
+            (rust_positions.first(), python_positions.first())
+        {
+            assert!(
+                best_rust_pos < py_pos,
+                "Rust results should rank higher than Python for 'programming language' query"
+            );
         }
-        assert!(results[0].observation.title.starts_with("rust-observation-"),
-            "Top result should be a Rust observation, got: {}", results[0].observation.title);
+        assert!(
+            results[0]
+                .observation
+                .title
+                .starts_with("rust-observation-"),
+            "Top result should be a Rust observation, got: {}",
+            results[0].observation.title
+        );
     }
 
     /// METRIC: Test that retain() respects token budget
@@ -388,15 +482,24 @@ mod tests {
         }
 
         let before = db.stats_db().unwrap();
-        println!("METRIC: before retain - entries={}, tokens={}", before.total_entries, before.total_tokens);
+        println!(
+            "METRIC: before retain - entries={}, tokens={}",
+            before.total_entries, before.total_tokens
+        );
 
         // Retain with very tight budget
         let freed = db.retain(100).unwrap();
         let after = db.stats_db().unwrap();
-        println!("METRIC: after retain(100) - entries={}, tokens={}, freed={} tokens",
-            after.total_entries, after.total_tokens, freed);
+        println!(
+            "METRIC: after retain(100) - entries={}, tokens={}, freed={} tokens",
+            after.total_entries, after.total_tokens, freed
+        );
 
-        assert!(after.total_tokens <= 1000, "retain should reduce tokens: {} > 1000", after.total_tokens);
+        assert!(
+            after.total_tokens <= 1000,
+            "retain should reduce tokens: {} > 1000",
+            after.total_tokens
+        );
     }
 
     /// METRIC: Verify summary is more token-efficient than full content
@@ -412,9 +515,9 @@ mod tests {
         );
         db.save_observation(&obs).unwrap();
 
-        let results = db.search_observations(
-            &crate::domain::entities::SearchParams::new("efficient")
-        ).unwrap();
+        let results = db
+            .search_observations(&crate::domain::entities::SearchParams::new("efficient"))
+            .unwrap();
 
         assert!(!results.is_empty());
 
@@ -424,12 +527,21 @@ mod tests {
         let efficient = obs.efficient_content(100);
         let efficient_tokens = estimate_tokens(efficient);
 
-        println!("METRIC: full content tokens={}, efficient tokens={}, ratio={:.1}x",
-            full_tokens, efficient_tokens,
-            if efficient_tokens > 0 { full_tokens as f64 / efficient_tokens as f64 } else { 0.0 });
+        println!(
+            "METRIC: full content tokens={}, efficient tokens={}, ratio={:.1}x",
+            full_tokens,
+            efficient_tokens,
+            if efficient_tokens > 0 {
+                full_tokens as f64 / efficient_tokens as f64
+            } else {
+                0.0
+            }
+        );
 
-        assert!(efficient_tokens <= full_tokens,
-            "efficient content should use fewer or equal tokens");
+        assert!(
+            efficient_tokens <= full_tokens,
+            "efficient content should use fewer or equal tokens"
+        );
     }
 
     #[test]
@@ -446,9 +558,16 @@ mod tests {
         let sim_ab = cosine_similarity(&emb_a, &emb_b);
         let sim_ac = cosine_similarity(&emb_a, &emb_c);
 
-        assert!(sim_ab > sim_ac,
-            "similar texts should have higher cosine similarity (ab={:.4}, ac={:.4})", sim_ab, sim_ac);
-        println!("METRIC: cosine_sim(similar)={:.4}, cosine_sim(dissimilar)={:.4}", sim_ab, sim_ac);
+        assert!(
+            sim_ab > sim_ac,
+            "similar texts should have higher cosine similarity (ab={:.4}, ac={:.4})",
+            sim_ab,
+            sim_ac
+        );
+        println!(
+            "METRIC: cosine_sim(similar)={:.4}, cosine_sim(dissimilar)={:.4}",
+            sim_ab, sim_ac
+        );
     }
 
     #[test]
@@ -463,26 +582,27 @@ mod tests {
         ];
 
         for (title, content) in &themes {
-            let obs = Observation::new(
-                session.clone(),
-                ObservationType::Memory,
-                *title,
-                *content,
-            );
+            let obs = Observation::new(session.clone(), ObservationType::Memory, *title, *content);
             db.save_observation(&obs).unwrap();
         }
 
-        let results = db.search_observations(
-            &crate::domain::entities::SearchParams::new("machine learning for finance")
-                .with_semantic(true)
-        ).unwrap();
+        let results = db
+            .search_observations(
+                &crate::domain::entities::SearchParams::new("machine learning for finance")
+                    .with_semantic(true),
+            )
+            .unwrap();
 
         assert!(!results.is_empty(), "semantic search should return results");
-        assert_eq!(results[0].observation.title, "trading system",
+        assert_eq!(
+            results[0].observation.title, "trading system",
             "most semantically relevant result should rank first, got: {}",
-            results[0].observation.title);
-        println!("METRIC: semantic search top result: '{}' with score {:.4}",
-            results[0].observation.title, results[0].score);
+            results[0].observation.title
+        );
+        println!(
+            "METRIC: semantic search top result: '{}' with score {:.4}",
+            results[0].observation.title, results[0].score
+        );
     }
 
     #[test]
@@ -507,13 +627,25 @@ mod tests {
         ];
         let text = sentences.join(" ");
         let chunks = chunk_text(&text, 50);
-        assert!(chunks.len() > 1, "long text should be split into multiple chunks, got {} chunks", chunks.len());
+        assert!(
+            chunks.len() > 1,
+            "long text should be split into multiple chunks, got {} chunks",
+            chunks.len()
+        );
         for (content, summary) in &chunks {
             assert!(!content.is_empty(), "chunk content should not be empty");
             assert!(!summary.is_empty(), "chunk summary should not be empty");
         }
-        let reconstructed: String = chunks.iter().map(|(c, _)| c.as_str()).collect::<Vec<&str>>().join("");
-        assert_eq!(reconstructed.len(), text.len(), "reconstructed text should match original");
+        let reconstructed: String = chunks
+            .iter()
+            .map(|(c, _)| c.as_str())
+            .collect::<Vec<&str>>()
+            .join("");
+        assert_eq!(
+            reconstructed.len(),
+            text.len(),
+            "reconstructed text should match original"
+        );
     }
 
     #[test]
@@ -532,25 +664,44 @@ mod tests {
         // Verify chunks were stored by querying directly via a new connection
         let chunk_count: i64 = {
             let conn = db.get_conn();
-            let mut stmt = conn.prepare(
-                "SELECT COUNT(*) FROM chunks WHERE observation_id = ?1"
-            ).unwrap();
-            stmt.query_row(rusqlite::params![obs_id.0], |row| row.get(0)).unwrap()
+            let mut stmt = conn
+                .prepare("SELECT COUNT(*) FROM chunks WHERE observation_id = ?1")
+                .unwrap();
+            stmt.query_row(rusqlite::params![obs_id.0], |row| row.get(0))
+                .unwrap()
         };
-        assert!(chunk_count > 0, "chunks should have been stored in the DB, got {} chunks", chunk_count);
+        assert!(
+            chunk_count > 0,
+            "chunks should have been stored in the DB, got {} chunks",
+            chunk_count
+        );
 
         // Test merge_chunks reconstructs the observation
         let merged = crate::infrastructure::database::merge_chunks(obs_id.0 as u64, &db);
-        assert!(merged.is_some(), "merge_chunks should return Some observation");
+        assert!(
+            merged.is_some(),
+            "merge_chunks should return Some observation"
+        );
         let merged = merged.unwrap();
-        assert_eq!(merged.title, "chunk storage test", "merged observation should preserve title");
-        assert!(merged.content.len() >= long_content.len() / 2, "merged content should be substantial");
+        assert_eq!(
+            merged.title, "chunk storage test",
+            "merged observation should preserve title"
+        );
+        assert!(
+            merged.content.len() >= long_content.len() / 2,
+            "merged content should be substantial"
+        );
 
         // Verify observation is still searchable via normal path
-        let results = db.search_observations(
-            &crate::domain::entities::SearchParams::new("machine learning")
-        ).unwrap();
-        assert!(!results.is_empty(), "chunked observation should be searchable");
+        let results = db
+            .search_observations(&crate::domain::entities::SearchParams::new(
+                "machine learning",
+            ))
+            .unwrap();
+        assert!(
+            !results.is_empty(),
+            "chunked observation should be searchable"
+        );
     }
 
     // ── Knowledge Graph tests ────────────────────────────────────────────────
@@ -564,12 +715,25 @@ mod tests {
         // Should find: Neural Network Project (Project), @alice→alice (Person), @bob→bob (Person),
         //   https://github.com/example (Tool), Rust (Language), PostgreSQL (Technology)
         let names: Vec<String> = entities.iter().map(|(n, _)| n.to_lowercase()).collect();
-        assert!(names.contains(&"neural network project".to_string()), "should detect Neural Network Project, got: {:?}", names);
+        assert!(
+            names.contains(&"neural network project".to_string()),
+            "should detect Neural Network Project, got: {:?}",
+            names
+        );
         assert!(names.contains(&"alice".to_string()), "should detect alice");
         assert!(names.contains(&"bob".to_string()), "should detect bob");
-        assert!(names.contains(&"rust".to_string()), "should detect Rust as language");
-        assert!(names.contains(&"postgresql".to_string()), "should detect PostgreSQL");
-        assert!(entities.iter().any(|(_, t)| *t == EntityType::Tool), "should have a Tool (URL)");
+        assert!(
+            names.contains(&"rust".to_string()),
+            "should detect Rust as language"
+        );
+        assert!(
+            names.contains(&"postgresql".to_string()),
+            "should detect PostgreSQL"
+        );
+        assert!(
+            entities.iter().any(|(_, t)| *t == EntityType::Tool),
+            "should have a Tool (URL)"
+        );
         println!("extracted entities: {:?}", entities);
     }
 
@@ -584,7 +748,9 @@ mod tests {
                 "john" => assert_eq!(*typ, EntityType::Person, "@john should be Person"),
                 "python" => assert_eq!(*typ, EntityType::Language, "Python should be Language"),
                 "docker" => assert_eq!(*typ, EntityType::Technology, "Docker should be Technology"),
-                "ml platform" => assert_eq!(*typ, EntityType::Project, "ML Platform should be Project"),
+                "ml platform" => {
+                    assert_eq!(*typ, EntityType::Project, "ML Platform should be Project")
+                }
                 "rest" => assert_eq!(*typ, EntityType::Technology, "REST should be Technology"),
                 "api" => assert_eq!(*typ, EntityType::Technology, "API should be Technology"),
                 "aws" => assert_eq!(*typ, EntityType::Technology, "AWS should be Technology"),
@@ -619,16 +785,28 @@ mod tests {
         assert!(!entities.is_empty(), "entities should be stored");
 
         let names: Vec<String> = entities.iter().map(|e| e.name.to_lowercase()).collect();
-        assert!(names.contains(&"quantum computing framework".to_string()), "should have Quantum Computing Framework");
+        assert!(
+            names.contains(&"quantum computing framework".to_string()),
+            "should have Quantum Computing Framework"
+        );
         assert!(names.contains(&"eve".to_string()), "should have eve");
         assert!(names.contains(&"rust".to_string()), "should have Rust");
         assert!(names.contains(&"python".to_string()), "should have Python");
-        assert!(names.contains(&"kubernetes".to_string()), "should have kubernetes");
+        assert!(
+            names.contains(&"kubernetes".to_string()),
+            "should have kubernetes"
+        );
 
         // Test entity_search with type filter
         let languages = db.entity_search("", Some(EntityType::Language)).unwrap();
-        assert!(languages.iter().any(|e| e.name == "rust"), "rust should be a Language");
-        assert!(languages.iter().any(|e| e.name == "python"), "python should be a Language");
+        assert!(
+            languages.iter().any(|e| e.name == "rust"),
+            "rust should be a Language"
+        );
+        assert!(
+            languages.iter().any(|e| e.name == "python"),
+            "python should be a Language"
+        );
 
         // Test entity_search by name query
         let results = db.entity_search("quantum", None).unwrap();
@@ -640,23 +818,31 @@ mod tests {
         use crate::infrastructure::database::get_str;
         use rusqlite::Connection;
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY, val TEXT)"
-        ).unwrap();
+        conn.execute_batch("CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY, val TEXT)")
+            .unwrap();
         let backend = SqliteBackend::new(conn);
-        backend.execute_batch(
-            "INSERT INTO test (id, val) VALUES (1, 'hello'), (2, 'world')"
-        ).unwrap();
-        let rows = backend.query("SELECT id, val FROM test ORDER BY id", &[]).unwrap();
+        backend
+            .execute_batch("INSERT INTO test (id, val) VALUES (1, 'hello'), (2, 'world')")
+            .unwrap();
+        let rows = backend
+            .query("SELECT id, val FROM test ORDER BY id", &[])
+            .unwrap();
         assert_eq!(rows.len(), 2);
         assert_eq!(get_str(&rows[0][1]), Some("hello"));
         assert_eq!(get_str(&rows[1][1]), Some("world"));
-        let affected = backend.execute(
-            "UPDATE test SET val = ?1 WHERE id = ?2",
-            &[rusqlite::types::Value::Text("updated".into()), rusqlite::types::Value::Integer(1)],
-        ).unwrap();
+        let affected = backend
+            .execute(
+                "UPDATE test SET val = ?1 WHERE id = ?2",
+                &[
+                    rusqlite::types::Value::Text("updated".into()),
+                    rusqlite::types::Value::Integer(1),
+                ],
+            )
+            .unwrap();
         assert_eq!(affected, 1);
-        let rows = backend.query("SELECT val FROM test WHERE id = 1", &[]).unwrap();
+        let rows = backend
+            .query("SELECT val FROM test WHERE id = 1", &[])
+            .unwrap();
         assert_eq!(get_str(&rows[0][0]), Some("updated"));
     }
 
@@ -673,9 +859,9 @@ mod tests {
         );
         let id = db.save_observation(&obs).unwrap();
         assert!(id.0 > 0);
-        let results = db.search_observations(
-            &SearchParams::new("backend trait")
-        ).unwrap();
+        let results = db
+            .search_observations(&SearchParams::new("backend trait"))
+            .unwrap();
         assert!(!results.is_empty());
         assert_eq!(results[0].observation.title, "backend trait test");
     }
@@ -688,19 +874,37 @@ mod tests {
         let entities = extract_entities(text);
         let relations = infer_relationships(text, &entities);
 
-        assert!(!relations.is_empty(), "should infer relationships, got {}", relations.len());
+        assert!(
+            !relations.is_empty(),
+            "should infer relationships, got {}",
+            relations.len()
+        );
 
         // Check Depends relation between ML Pipeline and Python
-        let depends = relations.iter().filter(|(_, _, rt, _)| *rt == RelationType::Depends).count();
-        assert!(depends > 0, "should have Depends relations, got {}", depends);
+        let depends = relations
+            .iter()
+            .filter(|(_, _, rt, _)| *rt == RelationType::Depends)
+            .count();
+        assert!(
+            depends > 0,
+            "should have Depends relations, got {}",
+            depends
+        );
 
         // Check Uses relation between @alice and Docker
-        let uses = relations.iter().filter(|(_, _, rt, _)| *rt == RelationType::Uses).count();
+        let uses = relations
+            .iter()
+            .filter(|(_, _, rt, _)| *rt == RelationType::Uses)
+            .count();
         assert!(uses > 0, "should have Uses relations, got {}", uses);
 
         // Verify relation types are correct
         for (_, _, _rt, w) in &relations {
-            assert!(*w > 0.0 && *w <= 1.0, "weight should be in (0,1], got {}", w);
+            assert!(
+                *w > 0.0 && *w <= 1.0,
+                "weight should be in (0,1], got {}",
+                w
+            );
         }
 
         // Save observation and verify relations are stored in DB
@@ -716,13 +920,22 @@ mod tests {
 
         // Debug: see what entities are stored
         let all_entities = db.entity_search("", None).unwrap();
-        println!("Stored entities: {:?}", all_entities.iter().map(|e| &e.name).collect::<Vec<_>>());
+        println!(
+            "Stored entities: {:?}",
+            all_entities.iter().map(|e| &e.name).collect::<Vec<_>>()
+        );
 
         // Use find_related_entities to verify graph traversal
         let related = db.find_related_entities("rust", 2, 0.0).unwrap();
-        assert!(!related.is_empty(), "Rust should have related entities, storage has: {:?}",
-            all_entities.iter().map(|e| &e.name).collect::<Vec<_>>());
-        println!("Entities related to Rust: {:?}", related.iter().map(|(_, _, e)| &e.name).collect::<Vec<_>>());
+        assert!(
+            !related.is_empty(),
+            "Rust should have related entities, storage has: {:?}",
+            all_entities.iter().map(|e| &e.name).collect::<Vec<_>>()
+        );
+        println!(
+            "Entities related to Rust: {:?}",
+            related.iter().map(|(_, _, e)| &e.name).collect::<Vec<_>>()
+        );
     }
 
     // ── AutoOptimizer tests ──────────────────────────────────────────
@@ -752,18 +965,35 @@ mod tests {
         }
 
         let before = db.stats_db().unwrap();
-        println!("OPTIMIZER: before - entries={}, tokens={}", before.total_entries, before.total_tokens);
+        println!(
+            "OPTIMIZER: before - entries={}, tokens={}",
+            before.total_entries, before.total_tokens
+        );
 
         let optimizer = AutoOptimizer::new(50);
         let stats = optimizer.optimize(&db).unwrap();
 
         let after = db.stats_db().unwrap();
-        println!("OPTIMIZER: after - entries={}, tokens={}", after.total_entries, after.total_tokens);
-        println!("OPTIMIZER: removed entries={}, summarized={}", stats.entries_removed, stats.entries_summarized);
+        println!(
+            "OPTIMIZER: after - entries={}, tokens={}",
+            after.total_entries, after.total_tokens
+        );
+        println!(
+            "OPTIMIZER: removed entries={}, summarized={}",
+            stats.entries_removed, stats.entries_summarized
+        );
 
-        assert!(before.total_entries > after.total_entries,
-            "optimize should remove entries (before={}, after={})", before.total_entries, after.total_entries);
-        assert!(stats.entries_removed > 0, "entries_removed should be > 0, got {}", stats.entries_removed);
+        assert!(
+            before.total_entries > after.total_entries,
+            "optimize should remove entries (before={}, after={})",
+            before.total_entries,
+            after.total_entries
+        );
+        assert!(
+            stats.entries_removed > 0,
+            "entries_removed should be > 0, got {}",
+            stats.entries_removed
+        );
     }
 
     #[test]
@@ -785,9 +1015,16 @@ mod tests {
         // Use target_latency_ms=0 so the in-memory DB's fast searches always exceed target
         let optimal = optimizer.auto_tune_budget(&db, 0).unwrap();
 
-        println!("OPTIMIZER: initial budget={}, optimal budget={}", initial_budget, optimal);
-        assert!(optimal < initial_budget,
-            "auto_tune should reduce budget (initial={}, optimal={})", initial_budget, optimal);
+        println!(
+            "OPTIMIZER: initial budget={}, optimal budget={}",
+            initial_budget, optimal
+        );
+        assert!(
+            optimal < initial_budget,
+            "auto_tune should reduce budget (initial={}, optimal={})",
+            initial_budget,
+            optimal
+        );
     }
 
     #[test]
@@ -806,13 +1043,27 @@ mod tests {
         let optimizer = AutoOptimizer::new(100);
         let stats = optimizer.optimize(&db).unwrap();
 
-        println!("OPTIMIZER: tokens before={}, after={}", stats.total_tokens_before, stats.total_tokens_after);
-        println!("OPTIMIZER: removed={}, summarized={}", stats.entries_removed, stats.entries_summarized);
-        println!("OPTIMIZER: latency={:.0}µs, budget_util={:.1}%",
-            stats.avg_latency_us, stats.budget_utilization_pct);
+        println!(
+            "OPTIMIZER: tokens before={}, after={}",
+            stats.total_tokens_before, stats.total_tokens_after
+        );
+        println!(
+            "OPTIMIZER: removed={}, summarized={}",
+            stats.entries_removed, stats.entries_summarized
+        );
+        println!(
+            "OPTIMIZER: latency={:.0}µs, budget_util={:.1}%",
+            stats.avg_latency_us, stats.budget_utilization_pct
+        );
 
-        assert!(stats.total_tokens_before > 0, "total_tokens_before should be > 0");
+        assert!(
+            stats.total_tokens_before > 0,
+            "total_tokens_before should be > 0"
+        );
         assert!(stats.avg_latency_us > 0.0, "avg_latency_us should be > 0.0");
-        assert!(stats.budget_utilization_pct >= 0.0, "budget_utilization_pct should be >= 0.0");
+        assert!(
+            stats.budget_utilization_pct >= 0.0,
+            "budget_utilization_pct should be >= 0.0"
+        );
     }
 }

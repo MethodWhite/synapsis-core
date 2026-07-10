@@ -1,7 +1,11 @@
-use crate::domain::entities::{Chunk, Entity, EntityType, MemoryEntry, Observation, Relation, RelationType, SearchParams, SearchResult, SessionInfo, estimate_tokens, summarize, compute_importance, compute_embedding, cosine_similarity, chunk_text, compute_chunks, extract_entities, infer_relationships};
+use crate::domain::entities::{
+    chunk_text, compute_chunks, compute_embedding, compute_importance, cosine_similarity,
+    estimate_tokens, extract_entities, infer_relationships, summarize, Chunk, Entity, EntityType,
+    MemoryEntry, Observation, Relation, RelationType, SearchParams, SearchResult, SessionInfo,
+};
+use crate::domain::ports::StoragePort;
 use crate::domain::ports::{MemoryStats, StorageBackend};
 use crate::domain::types::{ObservationId, ObservationType};
-use crate::domain::ports::StoragePort;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::sync::Mutex;
@@ -12,7 +16,9 @@ pub struct SqliteBackend {
 
 impl SqliteBackend {
     pub fn new(conn: Connection) -> Self {
-        Self { conn: Mutex::new(conn) }
+        Self {
+            conn: Mutex::new(conn),
+        }
     }
 
     pub fn conn_lock(&self) -> std::sync::MutexGuard<'_, Connection> {
@@ -21,24 +27,34 @@ impl SqliteBackend {
 }
 
 impl StorageBackend for SqliteBackend {
-    fn as_any(&self) -> &dyn std::any::Any { self }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 
     fn execute(&self, sql: &str, params: &[rusqlite::types::Value]) -> Result<u64, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        conn.execute(sql, rusqlite::params_from_iter(params.iter())).map(|c| c as u64).map_err(|e| e.to_string())
+        conn.execute(sql, rusqlite::params_from_iter(params.iter()))
+            .map(|c| c as u64)
+            .map_err(|e| e.to_string())
     }
 
-    fn query(&self, sql: &str, params: &[rusqlite::types::Value]) -> Result<Vec<Vec<rusqlite::types::Value>>, String> {
+    fn query(
+        &self,
+        sql: &str,
+        params: &[rusqlite::types::Value],
+    ) -> Result<Vec<Vec<rusqlite::types::Value>>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
         let col_count = stmt.column_count();
-        let rows = stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
-            let mut values = Vec::with_capacity(col_count);
-            for i in 0..col_count {
-                values.push(row.get::<_, rusqlite::types::Value>(i)?);
-            }
-            Ok(values)
-        }).map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(params.iter()), |row| {
+                let mut values = Vec::with_capacity(col_count);
+                for i in 0..col_count {
+                    values.push(row.get::<_, rusqlite::types::Value>(i)?);
+                }
+                Ok(values)
+            })
+            .map_err(|e| e.to_string())?;
         let mut result = Vec::with_capacity(rows.size_hint().0);
         for row in rows {
             result.push(row.map_err(|e| e.to_string())?);
@@ -64,9 +80,14 @@ impl PgBackend {
         use deadpool_postgres::Manager;
         use tokio_postgres::NoTls;
 
-        let pg_config: tokio_postgres::Config = conn_string.parse().map_err(|e| format!("Invalid connection string: {}", e))?;
+        let pg_config: tokio_postgres::Config = conn_string
+            .parse()
+            .map_err(|e| format!("Invalid connection string: {}", e))?;
         let mgr = Manager::new(pg_config, NoTls);
-        let pool = deadpool_postgres::Pool::builder(mgr).max_size(16).build().map_err(|e| e.to_string())?;
+        let pool = deadpool_postgres::Pool::builder(mgr)
+            .max_size(16)
+            .build()
+            .map_err(|e| e.to_string())?;
         let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
         Ok(Self { pool, rt })
     }
@@ -74,21 +95,43 @@ impl PgBackend {
 
 #[cfg(feature = "postgres")]
 impl StorageBackend for PgBackend {
-    fn as_any(&self) -> &dyn std::any::Any { self }
-
-    fn execute(&self, sql: &str, params: &[rusqlite::types::Value]) -> Result<u64, String> {
-        let client = self.rt.block_on(self.pool.get()).map_err(|e| e.to_string())?;
-        let pg_params = pg_params_from_values(params);
-        let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = pg_params.iter().map(|p| p.as_ref()).collect();
-        self.rt.block_on(client.execute(sql, &param_refs)).map_err(|e| e.to_string())
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn query(&self, sql: &str, params: &[rusqlite::types::Value]) -> Result<Vec<Vec<rusqlite::types::Value>>, String> {
-        let client = self.rt.block_on(self.pool.get()).map_err(|e| e.to_string())?;
-        let stmt = self.rt.block_on(client.prepare(sql)).map_err(|e| e.to_string())?;
+    fn execute(&self, sql: &str, params: &[rusqlite::types::Value]) -> Result<u64, String> {
+        let client = self
+            .rt
+            .block_on(self.pool.get())
+            .map_err(|e| e.to_string())?;
         let pg_params = pg_params_from_values(params);
-        let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = pg_params.iter().map(|p| p.as_ref()).collect();
-        let rows = self.rt.block_on(client.query(&stmt, &param_refs)).map_err(|e| e.to_string())?;
+        let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
+            pg_params.iter().map(|p| p.as_ref()).collect();
+        self.rt
+            .block_on(client.execute(sql, &param_refs))
+            .map_err(|e| e.to_string())
+    }
+
+    fn query(
+        &self,
+        sql: &str,
+        params: &[rusqlite::types::Value],
+    ) -> Result<Vec<Vec<rusqlite::types::Value>>, String> {
+        let client = self
+            .rt
+            .block_on(self.pool.get())
+            .map_err(|e| e.to_string())?;
+        let stmt = self
+            .rt
+            .block_on(client.prepare(sql))
+            .map_err(|e| e.to_string())?;
+        let pg_params = pg_params_from_values(params);
+        let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
+            pg_params.iter().map(|p| p.as_ref()).collect();
+        let rows = self
+            .rt
+            .block_on(client.query(&stmt, &param_refs))
+            .map_err(|e| e.to_string())?;
         let mut result = Vec::with_capacity(rows.len());
         for row in &rows {
             let mut values = Vec::with_capacity(row.len());
@@ -101,11 +144,16 @@ impl StorageBackend for PgBackend {
     }
 
     fn execute_batch(&self, sql: &str) -> Result<(), String> {
-        let client = self.rt.block_on(self.pool.get()).map_err(|e| e.to_string())?;
+        let client = self
+            .rt
+            .block_on(self.pool.get())
+            .map_err(|e| e.to_string())?;
         for statement in sql.split(';') {
             let trimmed = statement.trim();
             if !trimmed.is_empty() {
-                self.rt.block_on(client.execute(trimmed, &[])).map_err(|e| e.to_string())?;
+                self.rt
+                    .block_on(client.execute(trimmed, &[]))
+                    .map_err(|e| e.to_string())?;
             }
         }
         Ok(())
@@ -113,52 +161,67 @@ impl StorageBackend for PgBackend {
 }
 
 #[cfg(feature = "postgres")]
-fn pg_params_from_values(params: &[rusqlite::types::Value]) -> Vec<Box<dyn tokio_postgres::types::ToSql + Sync>> {
-    params.iter().map(|v| match v {
-        rusqlite::types::Value::Null => Box::new(None::<i64>) as Box<dyn tokio_postgres::types::ToSql + Sync>,
-        rusqlite::types::Value::Integer(i) => Box::new(*i) as Box<dyn tokio_postgres::types::ToSql + Sync>,
-        rusqlite::types::Value::Real(f) => Box::new(*f) as Box<dyn tokio_postgres::types::ToSql + Sync>,
-        rusqlite::types::Value::Text(s) => Box::new(s.clone()) as Box<dyn tokio_postgres::types::ToSql + Sync>,
-        rusqlite::types::Value::Blob(b) => Box::new(b.clone()) as Box<dyn tokio_postgres::types::ToSql + Sync>,
-    }).collect()
+fn pg_params_from_values(
+    params: &[rusqlite::types::Value],
+) -> Vec<Box<dyn tokio_postgres::types::ToSql + Sync>> {
+    params
+        .iter()
+        .map(|v| match v {
+            rusqlite::types::Value::Null => {
+                Box::new(None::<i64>) as Box<dyn tokio_postgres::types::ToSql + Sync>
+            }
+            rusqlite::types::Value::Integer(i) => {
+                Box::new(*i) as Box<dyn tokio_postgres::types::ToSql + Sync>
+            }
+            rusqlite::types::Value::Real(f) => {
+                Box::new(*f) as Box<dyn tokio_postgres::types::ToSql + Sync>
+            }
+            rusqlite::types::Value::Text(s) => {
+                Box::new(s.clone()) as Box<dyn tokio_postgres::types::ToSql + Sync>
+            }
+            rusqlite::types::Value::Blob(b) => {
+                Box::new(b.clone()) as Box<dyn tokio_postgres::types::ToSql + Sync>
+            }
+        })
+        .collect()
 }
 
 #[cfg(feature = "postgres")]
 fn pg_value_from_row(row: &tokio_postgres::Row, idx: usize) -> rusqlite::types::Value {
     if let Some(column) = row.columns().get(idx) {
         match column.type_().name() {
-            "int2" | "smallint" => {
-                row.try_get::<_, i16>(idx).map(|v| rusqlite::types::Value::Integer(v as i64))
-                    .unwrap_or(rusqlite::types::Value::Null)
-            }
-            "int4" | "integer" => {
-                row.try_get::<_, i32>(idx).map(|v| rusqlite::types::Value::Integer(v as i64))
-                    .unwrap_or(rusqlite::types::Value::Null)
-            }
-            "int8" | "bigint" => {
-                row.try_get::<_, i64>(idx).map(rusqlite::types::Value::Integer)
-                    .unwrap_or(rusqlite::types::Value::Null)
-            }
-            "float4" | "real" => {
-                row.try_get::<_, f32>(idx).map(|v| rusqlite::types::Value::Real(v as f64))
-                    .unwrap_or(rusqlite::types::Value::Null)
-            }
-            "float8" | "double precision" => {
-                row.try_get::<_, f64>(idx).map(rusqlite::types::Value::Real)
-                    .unwrap_or(rusqlite::types::Value::Null)
-            }
-            "text" | "varchar" | "bpchar" | "name" => {
-                row.try_get::<_, String>(idx).map(rusqlite::types::Value::Text)
-                    .unwrap_or(rusqlite::types::Value::Null)
-            }
-            "bytea" => {
-                row.try_get::<_, Vec<u8>>(idx).map(rusqlite::types::Value::Blob)
-                    .unwrap_or(rusqlite::types::Value::Null)
-            }
-            "bool" | "boolean" => {
-                row.try_get::<_, bool>(idx).map(|v| rusqlite::types::Value::Integer(if v { 1 } else { 0 }))
-                    .unwrap_or(rusqlite::types::Value::Null)
-            }
+            "int2" | "smallint" => row
+                .try_get::<_, i16>(idx)
+                .map(|v| rusqlite::types::Value::Integer(v as i64))
+                .unwrap_or(rusqlite::types::Value::Null),
+            "int4" | "integer" => row
+                .try_get::<_, i32>(idx)
+                .map(|v| rusqlite::types::Value::Integer(v as i64))
+                .unwrap_or(rusqlite::types::Value::Null),
+            "int8" | "bigint" => row
+                .try_get::<_, i64>(idx)
+                .map(rusqlite::types::Value::Integer)
+                .unwrap_or(rusqlite::types::Value::Null),
+            "float4" | "real" => row
+                .try_get::<_, f32>(idx)
+                .map(|v| rusqlite::types::Value::Real(v as f64))
+                .unwrap_or(rusqlite::types::Value::Null),
+            "float8" | "double precision" => row
+                .try_get::<_, f64>(idx)
+                .map(rusqlite::types::Value::Real)
+                .unwrap_or(rusqlite::types::Value::Null),
+            "text" | "varchar" | "bpchar" | "name" => row
+                .try_get::<_, String>(idx)
+                .map(rusqlite::types::Value::Text)
+                .unwrap_or(rusqlite::types::Value::Null),
+            "bytea" => row
+                .try_get::<_, Vec<u8>>(idx)
+                .map(rusqlite::types::Value::Blob)
+                .unwrap_or(rusqlite::types::Value::Null),
+            "bool" | "boolean" => row
+                .try_get::<_, bool>(idx)
+                .map(|v| rusqlite::types::Value::Integer(if v { 1 } else { 0 }))
+                .unwrap_or(rusqlite::types::Value::Null),
             _ => rusqlite::types::Value::Null,
         }
     } else {
@@ -191,22 +254,32 @@ impl StoragePort for Database {
 impl Database {
     pub fn new() -> Self {
         let conn = Connection::open_in_memory().expect("Failed to create in-memory database");
-        Self { backend: Box::new(SqliteBackend::new(conn)) }
+        Self {
+            backend: Box::new(SqliteBackend::new(conn)),
+        }
     }
 
     pub fn new_with_key(_key: Option<Vec<u8>>) -> Self {
-        Self { backend: Box::new(SqliteBackend::new(Connection::open_in_memory().expect("Failed to create in-memory database"))) }
+        Self {
+            backend: Box::new(SqliteBackend::new(
+                Connection::open_in_memory().expect("Failed to create in-memory database"),
+            )),
+        }
     }
 
     pub fn new_with_path(path: &str) -> Result<Self, String> {
         let conn = Connection::open(path).map_err(|e| e.to_string())?;
-        Ok(Self { backend: Box::new(SqliteBackend::new(conn)) })
+        Ok(Self {
+            backend: Box::new(SqliteBackend::new(conn)),
+        })
     }
 
     #[cfg(feature = "postgres")]
     pub fn new_postgres(conn_string: &str) -> Result<Self, String> {
         let backend = PgBackend::new(conn_string)?;
-        Ok(Self { backend: Box::new(backend) })
+        Ok(Self {
+            backend: Box::new(backend),
+        })
     }
 
     pub fn from_backend(backend: Box<dyn StorageBackend>) -> Self {
@@ -214,7 +287,11 @@ impl Database {
     }
 
     pub fn get_conn(&self) -> std::sync::MutexGuard<'_, Connection> {
-        self.backend.as_any().downcast_ref::<SqliteBackend>().expect("get_conn() requires SQLite backend").conn_lock()
+        self.backend
+            .as_any()
+            .downcast_ref::<SqliteBackend>()
+            .expect("get_conn() requires SQLite backend")
+            .conn_lock()
     }
 
     pub fn init(&self) -> Result<(), String> {
@@ -223,7 +300,8 @@ impl Database {
 
     fn schema_version(&self) -> Result<i64, String> {
         let rows = self.backend.query("PRAGMA user_version", &[])?;
-        Ok(rows.first()
+        Ok(rows
+            .first()
             .and_then(|row| row.first())
             .and_then(|v| {
                 if let rusqlite::types::Value::Integer(i) = v {
@@ -253,20 +331,22 @@ impl Database {
                     importance REAL DEFAULT 0.5,
                     token_count INTEGER DEFAULT 0,
                     access_count INTEGER DEFAULT 0
-                )"
+                )",
             )?;
             self.backend.execute_batch(
                 "CREATE INDEX IF NOT EXISTS idx_obs_importance ON observations(importance DESC)"
             ).ok();
-            self.backend.execute_batch(
-                "CREATE INDEX IF NOT EXISTS idx_obs_created ON observations(created_at DESC)"
-            ).ok();
+            self.backend
+                .execute_batch(
+                    "CREATE INDEX IF NOT EXISTS idx_obs_created ON observations(created_at DESC)",
+                )
+                .ok();
             self.backend.execute_batch(
                 "CREATE TABLE IF NOT EXISTS embeddings (
                     observation_id INTEGER PRIMARY KEY,
                     vector BLOB NOT NULL,
                     FOREIGN KEY (observation_id) REFERENCES observations(id) ON DELETE CASCADE
-                )"
+                )",
             )?;
             self.backend.execute_batch(
                 "CREATE TABLE IF NOT EXISTS chunks (
@@ -278,11 +358,13 @@ impl Database {
                     embedding BLOB,
                     seq INTEGER DEFAULT 0,
                     FOREIGN KEY (observation_id) REFERENCES observations(id) ON DELETE CASCADE
-                )"
+                )",
             )?;
-            self.backend.execute_batch(
-                "CREATE INDEX IF NOT EXISTS idx_chunks_obs ON chunks(observation_id)"
-            ).ok();
+            self.backend
+                .execute_batch(
+                    "CREATE INDEX IF NOT EXISTS idx_chunks_obs ON chunks(observation_id)",
+                )
+                .ok();
             self.backend.execute_batch(
                 "CREATE TABLE IF NOT EXISTS entities (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -293,7 +375,7 @@ impl Database {
                     mention_count INTEGER DEFAULT 1,
                     first_seen INTEGER NOT NULL,
                     last_seen INTEGER NOT NULL
-                )"
+                )",
             )?;
             self.backend.execute_batch(
                 "CREATE TABLE IF NOT EXISTS relations (
@@ -306,40 +388,46 @@ impl Database {
                     created_at INTEGER NOT NULL,
                     FOREIGN KEY (source_id) REFERENCES entities(id) ON DELETE CASCADE,
                     FOREIGN KEY (target_id) REFERENCES entities(id) ON DELETE CASCADE
-                )"
+                )",
             )?;
-            self.backend.execute_batch(
-                "CREATE INDEX IF NOT EXISTS idx_relations_source ON relations(source_id)"
-            ).ok();
-            self.backend.execute_batch(
-                "CREATE INDEX IF NOT EXISTS idx_relations_target ON relations(target_id)"
-            ).ok();
-            self.backend.execute_batch(
-                "CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type)"
-            ).ok();
+            self.backend
+                .execute_batch(
+                    "CREATE INDEX IF NOT EXISTS idx_relations_source ON relations(source_id)",
+                )
+                .ok();
+            self.backend
+                .execute_batch(
+                    "CREATE INDEX IF NOT EXISTS idx_relations_target ON relations(target_id)",
+                )
+                .ok();
+            self.backend
+                .execute_batch(
+                    "CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type)",
+                )
+                .ok();
             self.backend.execute_batch("PRAGMA user_version = 1")?;
         }
 
         if version < 2 {
             // Migrate from old schema (20 columns, no summary/tags/obs_type/importance/etc.)
-            self.backend.execute_batch(
-                "ALTER TABLE observations ADD COLUMN summary TEXT DEFAULT ''"
-            ).ok();
-            self.backend.execute_batch(
-                "ALTER TABLE observations ADD COLUMN tags TEXT DEFAULT ''"
-            ).ok();
-            self.backend.execute_batch(
-                "ALTER TABLE observations ADD COLUMN obs_type TEXT DEFAULT 'Note'"
-            ).ok();
-            self.backend.execute_batch(
-                "ALTER TABLE observations ADD COLUMN importance REAL DEFAULT 0.5"
-            ).ok();
-            self.backend.execute_batch(
-                "ALTER TABLE observations ADD COLUMN token_count INTEGER DEFAULT 0"
-            ).ok();
-            self.backend.execute_batch(
-                "ALTER TABLE observations ADD COLUMN access_count INTEGER DEFAULT 0"
-            ).ok();
+            self.backend
+                .execute_batch("ALTER TABLE observations ADD COLUMN summary TEXT DEFAULT ''")
+                .ok();
+            self.backend
+                .execute_batch("ALTER TABLE observations ADD COLUMN tags TEXT DEFAULT ''")
+                .ok();
+            self.backend
+                .execute_batch("ALTER TABLE observations ADD COLUMN obs_type TEXT DEFAULT 'Note'")
+                .ok();
+            self.backend
+                .execute_batch("ALTER TABLE observations ADD COLUMN importance REAL DEFAULT 0.5")
+                .ok();
+            self.backend
+                .execute_batch("ALTER TABLE observations ADD COLUMN token_count INTEGER DEFAULT 0")
+                .ok();
+            self.backend
+                .execute_batch("ALTER TABLE observations ADD COLUMN access_count INTEGER DEFAULT 0")
+                .ok();
             self.backend.execute_batch("PRAGMA user_version = 2")?;
         }
 
@@ -370,7 +458,10 @@ impl Database {
         let blob = serialize_embedding(&embedding);
         self.backend.execute(
             "INSERT OR REPLACE INTO embeddings (observation_id, vector) VALUES (?1, ?2)",
-            &[rusqlite::types::Value::Integer(id), rusqlite::types::Value::Blob(blob)],
+            &[
+                rusqlite::types::Value::Integer(id),
+                rusqlite::types::Value::Blob(blob),
+            ],
         )?;
         let mut obs_clone = obs.clone();
         obs_clone.id = ObservationId::new(id);
@@ -424,8 +515,16 @@ impl Database {
                 "SELECT id FROM entities WHERE name = ?1",
                 &[rusqlite::types::Value::Text(tgt_name.clone())],
             )?;
-            let src_id = src_rows.first().map(|r| get_i64(&r[0])).flatten().unwrap_or(0);
-            let tgt_id = tgt_rows.first().map(|r| get_i64(&r[0])).flatten().unwrap_or(0);
+            let src_id = src_rows
+                .first()
+                .map(|r| get_i64(&r[0]))
+                .flatten()
+                .unwrap_or(0);
+            let tgt_id = tgt_rows
+                .first()
+                .map(|r| get_i64(&r[0]))
+                .flatten()
+                .unwrap_or(0);
             self.backend.execute(
                 "INSERT INTO relations (source_id, target_id, relation_type, weight, observation_id, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -469,7 +568,8 @@ impl Database {
                     "SELECT vector FROM embeddings WHERE observation_id = ?1",
                     &[rusqlite::types::Value::Integer(obs.id.0)],
                 )?;
-                let semantic_score = emb_rows.first()
+                let semantic_score = emb_rows
+                    .first()
                     .map(|r| get_blob(&r[0]))
                     .flatten()
                     .and_then(|blob| deserialize_embedding(blob))
@@ -485,24 +585,40 @@ impl Database {
             candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
             for (obs, score) in candidates {
-                if token_budget <= 0 || results.len() >= limit { break; }
+                if token_budget <= 0 || results.len() >= limit {
+                    break;
+                }
                 let tc = obs.token_count;
                 token_budget -= tc as i64;
-                results.push(SearchResult { observation: obs, score, token_cost: tc, matched_chunk_ids: vec![] });
+                results.push(SearchResult {
+                    observation: obs,
+                    score,
+                    token_cost: tc,
+                    matched_chunk_ids: vec![],
+                });
             }
         } else {
             for row in &rows {
                 let obs = row_to_observation(row)?;
-                if token_budget <= 0 { break; }
+                if token_budget <= 0 {
+                    break;
+                }
 
                 let score = text_match_score(&query, &obs.title, &obs.content);
                 let tc = obs.token_count as i64;
 
                 if score > 0.0 {
                     token_budget -= tc;
-                    results.push(SearchResult { observation: obs.clone(), score, token_cost: obs.token_count, matched_chunk_ids: vec![] });
+                    results.push(SearchResult {
+                        observation: obs.clone(),
+                        score,
+                        token_cost: obs.token_count,
+                        matched_chunk_ids: vec![],
+                    });
                 }
-                if results.len() >= limit { break; }
+                if results.len() >= limit {
+                    break;
+                }
             }
         }
 
@@ -516,7 +632,8 @@ impl Database {
                      WHERE o.importance >= ?1",
                     &[rusqlite::types::Value::Real(min_imp as f64)],
                 )?;
-                let mut obs_scores: std::collections::HashMap<i64, (f64, Vec<u64>)> = std::collections::HashMap::new();
+                let mut obs_scores: std::collections::HashMap<i64, (f64, Vec<u64>)> =
+                    std::collections::HashMap::new();
                 for r in &crows {
                     let cid = get_i64(&r[0]).unwrap_or(0);
                     let oid = get_i64(&r[1]).unwrap_or(0);
@@ -533,10 +650,13 @@ impl Database {
                         }
                     }
                 }
-                let mut sorted: Vec<(i64, f64, Vec<u64>)> = obs_scores.into_iter().map(|(k, v)| (k, v.0, v.1)).collect();
+                let mut sorted: Vec<(i64, f64, Vec<u64>)> =
+                    obs_scores.into_iter().map(|(k, v)| (k, v.0, v.1)).collect();
                 sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                 for (oid, score, cids) in sorted {
-                    if token_budget <= 0 || results.len() >= limit { break; }
+                    if token_budget <= 0 || results.len() >= limit {
+                        break;
+                    }
                     let obs_rows = self.backend.query(
                         "SELECT id, session_id, title, summary, content, project, tags, created_at, obs_type, importance, token_count, access_count
                          FROM observations WHERE id = ?1",
@@ -546,7 +666,12 @@ impl Database {
                         if let Ok(obs) = row_to_observation(orow) {
                             let tc = obs.token_count;
                             token_budget -= tc as i64;
-                            results.push(SearchResult { observation: obs, score, token_cost: tc, matched_chunk_ids: cids });
+                            results.push(SearchResult {
+                                observation: obs,
+                                score,
+                                token_cost: tc,
+                                matched_chunk_ids: cids,
+                            });
                         }
                     }
                 }
@@ -557,16 +682,22 @@ impl Database {
                      FROM chunks c JOIN observations o ON c.observation_id = o.id
                      WHERE LOWER(c.content) LIKE ?1 AND o.importance >= ?2
                      ORDER BY c.id",
-                    &[rusqlite::types::Value::Text(like), rusqlite::types::Value::Real(min_imp as f64)],
+                    &[
+                        rusqlite::types::Value::Text(like),
+                        rusqlite::types::Value::Real(min_imp as f64),
+                    ],
                 )?;
-                let mut obs_chunks: std::collections::HashMap<i64, Vec<u64>> = std::collections::HashMap::new();
+                let mut obs_chunks: std::collections::HashMap<i64, Vec<u64>> =
+                    std::collections::HashMap::new();
                 for r in &crows {
                     let cid = get_i64(&r[0]).unwrap_or(0);
                     let oid = get_i64(&r[1]).unwrap_or(0);
                     obs_chunks.entry(oid).or_default().push(cid as u64);
                 }
                 for (oid, cids) in &obs_chunks {
-                    if token_budget <= 0 || results.len() >= limit { break; }
+                    if token_budget <= 0 || results.len() >= limit {
+                        break;
+                    }
                     let obs_rows = self.backend.query(
                         "SELECT id, session_id, title, summary, content, project, tags, created_at, obs_type, importance, token_count, access_count
                          FROM observations WHERE id = ?1",
@@ -577,7 +708,12 @@ impl Database {
                             let tc = obs.token_count;
                             token_budget -= tc as i64;
                             let score = cids.len() as f64;
-                            results.push(SearchResult { observation: obs, score, token_cost: tc, matched_chunk_ids: cids.clone() });
+                            results.push(SearchResult {
+                                observation: obs,
+                                score,
+                                token_cost: tc,
+                                matched_chunk_ids: cids.clone(),
+                            });
                         }
                     }
                 }
@@ -585,12 +721,17 @@ impl Database {
         }
 
         // Update access_count for retrieved entries
-        let ids: Vec<String> = results.iter().map(|r| r.observation.id.0.to_string()).collect();
+        let ids: Vec<String> = results
+            .iter()
+            .map(|r| r.observation.id.0.to_string())
+            .collect();
         if !ids.is_empty() {
-            self.backend.execute_batch(&format!(
-                "UPDATE observations SET access_count = access_count + 1 WHERE id IN ({})",
-                ids.join(",")
-            )).ok();
+            self.backend
+                .execute_batch(&format!(
+                    "UPDATE observations SET access_count = access_count + 1 WHERE id IN ({})",
+                    ids.join(",")
+                ))
+                .ok();
         }
 
         Ok(results)
@@ -633,11 +774,39 @@ impl Database {
 
     // ── Memory (token-efficient) methods ─────────────────────────────
 
-    pub fn acquire_lock(&self, _resource: &str, _session_id: &str, _lock_type: &str, _metadata: Option<&str>, _ttl_secs: i64) -> Result<bool, String> { Ok(true) }
-    pub fn release_lock(&self, _resource: &str) -> Result<(), String> { Ok(()) }
-    pub fn delete_observation(&self, _id: ObservationId, _agent_id: &str, _reason: Option<&str>) -> Result<(), String> { Ok(()) }
-    pub fn get_global_context(&self, _session_id: &str) -> Result<Option<Value>, String> { Ok(Some(serde_json::json!({}))) }
-    pub fn update_observation(&self, _id: ObservationId, _content: &str, _agent_id: &str, _reason: Option<&str>) -> Result<(), String> { Ok(()) }
+    pub fn acquire_lock(
+        &self,
+        _resource: &str,
+        _session_id: &str,
+        _lock_type: &str,
+        _metadata: Option<&str>,
+        _ttl_secs: i64,
+    ) -> Result<bool, String> {
+        Ok(true)
+    }
+    pub fn release_lock(&self, _resource: &str) -> Result<(), String> {
+        Ok(())
+    }
+    pub fn delete_observation(
+        &self,
+        _id: ObservationId,
+        _agent_id: &str,
+        _reason: Option<&str>,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+    pub fn get_global_context(&self, _session_id: &str) -> Result<Option<Value>, String> {
+        Ok(Some(serde_json::json!({})))
+    }
+    pub fn update_observation(
+        &self,
+        _id: ObservationId,
+        _content: &str,
+        _agent_id: &str,
+        _reason: Option<&str>,
+    ) -> Result<(), String> {
+        Ok(())
+    }
 
     pub fn save_memory(&self, memory: &MemoryEntry) -> Result<(), String> {
         let title = format!("memory-{}", memory.session_id.as_str());
@@ -658,34 +827,43 @@ impl Database {
         Ok(())
     }
 
-    pub fn search_fts(&self, query: &str, _project: Option<&str>, limit: i32, max_tokens: Option<u32>) -> Result<Vec<Value>, String> {
+    pub fn search_fts(
+        &self,
+        query: &str,
+        _project: Option<&str>,
+        limit: i32,
+        max_tokens: Option<u32>,
+    ) -> Result<Vec<Value>, String> {
         let params = SearchParams::new(query)
             .with_limit(limit)
             .with_max_tokens(max_tokens.unwrap_or(1024));
         let results = self.search_observations_impl(&params)?;
-        Ok(results.into_iter().map(|r| {
-            json!({
-                "id": r.observation.id.0,
-                "title": r.observation.title,
-                "summary": r.observation.summary,
-                "content": r.observation.efficient_content(100),
-                "importance": r.observation.importance,
-                "token_count": r.observation.token_count,
-                "score": r.score,
+        Ok(results
+            .into_iter()
+            .map(|r| {
+                json!({
+                    "id": r.observation.id.0,
+                    "title": r.observation.title,
+                    "summary": r.observation.summary,
+                    "content": r.observation.efficient_content(100),
+                    "importance": r.observation.importance,
+                    "token_count": r.observation.token_count,
+                    "score": r.score,
+                })
             })
-        }).collect())
+            .collect())
     }
 
     pub fn retain(&self, max_tokens: u64) -> Result<u64, String> {
         let rows = self.backend.query(
-            "SELECT COALESCE(SUM(token_count), 0) FROM observations", &[],
+            "SELECT COALESCE(SUM(token_count), 0) FROM observations",
+            &[],
         )?;
-        let total: i64 = rows.first()
-            .map(|r| get_i64(&r[0]))
-            .flatten()
-            .unwrap_or(0);
+        let total: i64 = rows.first().map(|r| get_i64(&r[0])).flatten().unwrap_or(0);
 
-        if (total as u64) <= max_tokens { return Ok(0); }
+        if (total as u64) <= max_tokens {
+            return Ok(0);
+        }
 
         let excess = (total as u64) - max_tokens;
         self.backend.execute_batch(&format!(
@@ -699,14 +877,36 @@ impl Database {
     }
 
     pub fn stats_db(&self) -> Result<crate::domain::ports::MemoryStats, String> {
-        let entries = self.backend.query("SELECT COUNT(*) FROM observations", &[])?;
-        let total_entries: i64 = entries.first().map(|r| get_i64(&r[0])).flatten().unwrap_or(0);
-        let tokens = self.backend.query("SELECT COALESCE(SUM(token_count), 0) FROM observations", &[])?;
-        let total_tokens: i64 = tokens.first().map(|r| get_i64(&r[0])).flatten().unwrap_or(0);
-        let avg = self.backend.query("SELECT COALESCE(AVG(importance), 0.0) FROM observations", &[])?;
+        let entries = self
+            .backend
+            .query("SELECT COUNT(*) FROM observations", &[])?;
+        let total_entries: i64 = entries
+            .first()
+            .map(|r| get_i64(&r[0]))
+            .flatten()
+            .unwrap_or(0);
+        let tokens = self.backend.query(
+            "SELECT COALESCE(SUM(token_count), 0) FROM observations",
+            &[],
+        )?;
+        let total_tokens: i64 = tokens
+            .first()
+            .map(|r| get_i64(&r[0]))
+            .flatten()
+            .unwrap_or(0);
+        let avg = self.backend.query(
+            "SELECT COALESCE(AVG(importance), 0.0) FROM observations",
+            &[],
+        )?;
         let avg_imp: f64 = avg.first().map(|r| get_f64(&r[0])).flatten().unwrap_or(0.0);
-        let sessions = self.backend.query("SELECT COUNT(DISTINCT session_id) FROM observations", &[])?;
-        let unique_sessions: i64 = sessions.first().map(|r| get_i64(&r[0])).flatten().unwrap_or(0);
+        let sessions = self
+            .backend
+            .query("SELECT COUNT(DISTINCT session_id) FROM observations", &[])?;
+        let unique_sessions: i64 = sessions
+            .first()
+            .map(|r| get_i64(&r[0]))
+            .flatten()
+            .unwrap_or(0);
         Ok(crate::domain::ports::MemoryStats {
             total_entries: total_entries as u64,
             total_tokens: total_tokens as u64,
@@ -716,38 +916,150 @@ impl Database {
     }
 
     // Legacy passthrough methods
-    pub fn get_active_agents(&self, _project: Option<&str>) -> Result<Vec<Value>, String> { Ok(vec![]) }
-    pub fn register_agent_session(&self, _agent_type: &str, _instance: &str, _project: Option<&str>, _ttl: Option<i64>) -> Result<String, String> {
+    pub fn get_active_agents(&self, _project: Option<&str>) -> Result<Vec<Value>, String> {
+        Ok(vec![])
+    }
+    pub fn register_agent_session(
+        &self,
+        _agent_type: &str,
+        _instance: &str,
+        _project: Option<&str>,
+        _ttl: Option<i64>,
+    ) -> Result<String, String> {
         Ok(uuid::Uuid::new_v4().to_string())
     }
-    pub fn create_task(&self, _project: &str, _task_type: &str, _payload: &str, _priority: i32) -> Result<String, String> {
+    pub fn create_task(
+        &self,
+        _project: &str,
+        _task_type: &str,
+        _payload: &str,
+        _priority: i32,
+    ) -> Result<String, String> {
         Ok(uuid::Uuid::new_v4().to_string())
     }
-    pub fn list_tasks(&self, _project: Option<&str>, _task_type: Option<&str>, _status: Option<&str>, _limit: Option<i32>) -> Result<Vec<Value>, String> { Ok(vec![]) }
-    pub fn claim_task(&self, _session_id: &str, _task_type: Option<&str>) -> Result<Option<Value>, String> { Ok(None) }
-    pub fn cancel_task(&self, _task_id: &str) -> Result<(), String> { Ok(()) }
-    pub fn complete_task(&self, _task_id: &str, _result: Option<&str>, _error: Option<&str>) -> Result<(), String> { Ok(()) }
-    pub fn publish_event(&self, _event_type: &str, _from: &str, _to: Option<&str>, _project: Option<&str>, _channel: &str, _content: &str, _priority: i32) -> Result<i64, String> { Ok(1) }
-    pub fn broadcast_event(&self, _event_type: &str, _from: &str, _project: Option<&str>, _channel: &str, _content: &str, _priority: i32) -> Result<i64, String> { Ok(1) }
-    pub fn poll_events(&self, _since: i64, _channel: Option<&str>, _project: Option<&str>, _limit: i32) -> Result<Vec<Value>, String> { Ok(vec![]) }
-    pub fn get_pending_messages(&self, _session_id: &str) -> Result<Vec<Value>, String> { Ok(vec![]) }
-    pub fn acknowledge_event(&self, _event_id: i64) -> Result<(), String> { Ok(()) }
-    pub fn get_chunks_by_project(&self, _project: &str, _filter: Option<&str>) -> Result<Vec<Value>, String> { Ok(vec![]) }
-    pub fn get_agent_details(&self, _session_id: &str) -> Result<Option<Value>, String> { Ok(None) }
-    pub fn agent_heartbeat(&self, _session_id: &str, _task: Option<&str>) -> Result<(), String> { Ok(()) }
-    pub fn audit_task(&self, _task_id: &str, _auditor: &str, _status: &str, _notes: Option<&str>) -> Result<(), String> { Ok(()) }
-    pub fn db_health(&self) -> Result<Value, String> { Ok(json!({"status": "healthy", "connections": 1})) }
-    pub fn get_stats(&self) -> Result<Value, String> { Ok(json!({"observations": 0, "agents": 0, "tasks": 0})) }
-    pub fn stats_legacy(&self) -> Result<Value, String> { self.get_stats() }
-    pub fn create_chunk(&self, _project: &str, _title: &str, _content: &str, _metadata: Option<&str>, _embedding: usize) -> Result<String, String> {
+    pub fn list_tasks(
+        &self,
+        _project: Option<&str>,
+        _task_type: Option<&str>,
+        _status: Option<&str>,
+        _limit: Option<i32>,
+    ) -> Result<Vec<Value>, String> {
+        Ok(vec![])
+    }
+    pub fn claim_task(
+        &self,
+        _session_id: &str,
+        _task_type: Option<&str>,
+    ) -> Result<Option<Value>, String> {
+        Ok(None)
+    }
+    pub fn cancel_task(&self, _task_id: &str) -> Result<(), String> {
+        Ok(())
+    }
+    pub fn complete_task(
+        &self,
+        _task_id: &str,
+        _result: Option<&str>,
+        _error: Option<&str>,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+    pub fn publish_event(
+        &self,
+        _event_type: &str,
+        _from: &str,
+        _to: Option<&str>,
+        _project: Option<&str>,
+        _channel: &str,
+        _content: &str,
+        _priority: i32,
+    ) -> Result<i64, String> {
+        Ok(1)
+    }
+    pub fn broadcast_event(
+        &self,
+        _event_type: &str,
+        _from: &str,
+        _project: Option<&str>,
+        _channel: &str,
+        _content: &str,
+        _priority: i32,
+    ) -> Result<i64, String> {
+        Ok(1)
+    }
+    pub fn poll_events(
+        &self,
+        _since: i64,
+        _channel: Option<&str>,
+        _project: Option<&str>,
+        _limit: i32,
+    ) -> Result<Vec<Value>, String> {
+        Ok(vec![])
+    }
+    pub fn get_pending_messages(&self, _session_id: &str) -> Result<Vec<Value>, String> {
+        Ok(vec![])
+    }
+    pub fn acknowledge_event(&self, _event_id: i64) -> Result<(), String> {
+        Ok(())
+    }
+    pub fn get_chunks_by_project(
+        &self,
+        _project: &str,
+        _filter: Option<&str>,
+    ) -> Result<Vec<Value>, String> {
+        Ok(vec![])
+    }
+    pub fn get_agent_details(&self, _session_id: &str) -> Result<Option<Value>, String> {
+        Ok(None)
+    }
+    pub fn agent_heartbeat(&self, _session_id: &str, _task: Option<&str>) -> Result<(), String> {
+        Ok(())
+    }
+    pub fn audit_task(
+        &self,
+        _task_id: &str,
+        _auditor: &str,
+        _status: &str,
+        _notes: Option<&str>,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+    pub fn db_health(&self) -> Result<Value, String> {
+        Ok(json!({"status": "healthy", "connections": 1}))
+    }
+    pub fn get_stats(&self) -> Result<Value, String> {
+        Ok(json!({"observations": 0, "agents": 0, "tasks": 0}))
+    }
+    pub fn stats_legacy(&self) -> Result<Value, String> {
+        self.get_stats()
+    }
+    pub fn create_chunk(
+        &self,
+        _project: &str,
+        _title: &str,
+        _content: &str,
+        _metadata: Option<&str>,
+        _embedding: usize,
+    ) -> Result<String, String> {
         Ok(uuid::Uuid::new_v4().to_string())
     }
-    pub fn list_sessions(&self) -> Result<Vec<SessionInfo>, String> { Ok(vec![]) }
+    pub fn list_sessions(&self) -> Result<Vec<SessionInfo>, String> {
+        Ok(vec![])
+    }
 
     // Legacy stub methods
-    pub fn get_observation(&self, _id: ObservationId) -> Result<Option<Observation>, String> { Ok(None) }
-    pub fn get_timeline(&self, _limit: i32) -> Result<Vec<crate::domain::entities::TimelineEntry>, String> { Ok(vec![]) }
-    pub fn stats(&self) -> Result<Value, String> { self.db_health() }
+    pub fn get_observation(&self, _id: ObservationId) -> Result<Option<Observation>, String> {
+        Ok(None)
+    }
+    pub fn get_timeline(
+        &self,
+        _limit: i32,
+    ) -> Result<Vec<crate::domain::entities::TimelineEntry>, String> {
+        Ok(vec![])
+    }
+    pub fn stats(&self) -> Result<Value, String> {
+        self.db_health()
+    }
     /// Inherent method for compatibility: delegates to StoragePort impl
     pub fn save_observation(&self, obs: &Observation) -> Result<ObservationId, String> {
         <Self as StoragePort>::save_observation(self, obs)
@@ -780,7 +1092,10 @@ impl Database {
         Ok(())
     }
 
-    pub fn optimize(&self, max_tokens: u64) -> Result<crate::infrastructure::optimizer::OptimizationStats, String> {
+    pub fn optimize(
+        &self,
+        max_tokens: u64,
+    ) -> Result<crate::infrastructure::optimizer::OptimizationStats, String> {
         use crate::infrastructure::optimizer::AutoOptimizer;
         let optimizer = AutoOptimizer::new(max_tokens);
         optimizer.optimize(self)
@@ -788,7 +1103,12 @@ impl Database {
 
     // ── Knowledge Graph methods ──────────────────────────────────────
 
-    pub fn extract_and_store_entities(&self, observation_id: u64, content: &str, title: &str) -> Result<(), String> {
+    pub fn extract_and_store_entities(
+        &self,
+        observation_id: u64,
+        content: &str,
+        title: &str,
+    ) -> Result<(), String> {
         let text = format!("{} {}", title, content);
         let entity_list = extract_entities(&text);
         let relationships = infer_relationships(&text, &entity_list);
@@ -824,8 +1144,16 @@ impl Database {
                 "SELECT id FROM entities WHERE name = ?1",
                 &[rusqlite::types::Value::Text(tgt_name.clone())],
             )?;
-            let src_id = src_rows.first().map(|r| get_i64(&r[0])).flatten().unwrap_or(0);
-            let tgt_id = tgt_rows.first().map(|r| get_i64(&r[0])).flatten().unwrap_or(0);
+            let src_id = src_rows
+                .first()
+                .map(|r| get_i64(&r[0]))
+                .flatten()
+                .unwrap_or(0);
+            let tgt_id = tgt_rows
+                .first()
+                .map(|r| get_i64(&r[0]))
+                .flatten()
+                .unwrap_or(0);
             self.backend.execute(
                 "INSERT INTO relations (source_id, target_id, relation_type, weight, observation_id, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -843,7 +1171,12 @@ impl Database {
         Ok(())
     }
 
-    pub fn find_related_entities(&self, entity_name: &str, max_depth: u32, min_weight: f32) -> Result<Vec<(Entity, Relation, Entity)>, String> {
+    pub fn find_related_entities(
+        &self,
+        entity_name: &str,
+        max_depth: u32,
+        min_weight: f32,
+    ) -> Result<Vec<(Entity, Relation, Entity)>, String> {
         let root_rows = self.backend.query(
             "SELECT id FROM entities WHERE name = ?1",
             &[rusqlite::types::Value::Text(entity_name.to_string())],
@@ -895,7 +1228,12 @@ impl Database {
                     id: get_i64(&row[7]).unwrap_or(0) as u64,
                     name: get_str(&row[8]).unwrap_or("").to_string(),
                     entity_type: parse_entity_type(get_str(&row[9]).unwrap_or("")),
-                    aliases: get_str(&row[10]).unwrap_or("").split(',').map(|s| s.to_string()).filter(|s| !s.is_empty()).collect(),
+                    aliases: get_str(&row[10])
+                        .unwrap_or("")
+                        .split(',')
+                        .map(|s| s.to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect(),
                     embedding: vec![],
                     mention_count: get_i64(&row[11]).unwrap_or(0) as u64,
                     first_seen: crate::domain::types::Timestamp(get_i64(&row[12]).unwrap_or(0)),
@@ -905,7 +1243,12 @@ impl Database {
                     id: get_i64(&row[14]).unwrap_or(0) as u64,
                     name: get_str(&row[15]).unwrap_or("").to_string(),
                     entity_type: parse_entity_type(get_str(&row[16]).unwrap_or("")),
-                    aliases: get_str(&row[17]).unwrap_or("").split(',').map(|s| s.to_string()).filter(|s| !s.is_empty()).collect(),
+                    aliases: get_str(&row[17])
+                        .unwrap_or("")
+                        .split(',')
+                        .map(|s| s.to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect(),
                     embedding: vec![],
                     mention_count: get_i64(&row[18]).unwrap_or(0) as u64,
                     first_seen: crate::domain::types::Timestamp(get_i64(&row[19]).unwrap_or(0)),
@@ -927,17 +1270,32 @@ impl Database {
         Ok(results)
     }
 
-    pub fn entity_search(&self, query: &str, entity_type: Option<EntityType>) -> Result<Vec<Entity>, String> {
+    pub fn entity_search(
+        &self,
+        query: &str,
+        entity_type: Option<EntityType>,
+    ) -> Result<Vec<Entity>, String> {
         let like = format!("%{}%", query);
 
         let (sql, params) = if let Some(ref et) = entity_type {
-            (format!("SELECT id, name, entity_type, aliases, mention_count, first_seen, last_seen
-                      FROM entities WHERE (name LIKE ?1 OR aliases LIKE ?1) AND entity_type = ?2"),
-             vec![rusqlite::types::Value::Text(like), rusqlite::types::Value::Text(format!("{:?}", et))])
+            (
+                format!(
+                    "SELECT id, name, entity_type, aliases, mention_count, first_seen, last_seen
+                      FROM entities WHERE (name LIKE ?1 OR aliases LIKE ?1) AND entity_type = ?2"
+                ),
+                vec![
+                    rusqlite::types::Value::Text(like),
+                    rusqlite::types::Value::Text(format!("{:?}", et)),
+                ],
+            )
         } else {
-            (format!("SELECT id, name, entity_type, aliases, mention_count, first_seen, last_seen
-                      FROM entities WHERE name LIKE ?1 OR aliases LIKE ?1"),
-             vec![rusqlite::types::Value::Text(like)])
+            (
+                format!(
+                    "SELECT id, name, entity_type, aliases, mention_count, first_seen, last_seen
+                      FROM entities WHERE name LIKE ?1 OR aliases LIKE ?1"
+                ),
+                vec![rusqlite::types::Value::Text(like)],
+            )
         };
 
         let rows = self.backend.query(&sql, &params)?;
@@ -947,7 +1305,12 @@ impl Database {
                 id: get_i64(&row[0]).unwrap_or(0) as u64,
                 name: get_str(&row[1]).unwrap_or("").to_string(),
                 entity_type: parse_entity_type(get_str(&row[2]).unwrap_or("")),
-                aliases: get_str(&row[3]).unwrap_or("").split(',').map(|s| s.to_string()).filter(|s| !s.is_empty()).collect(),
+                aliases: get_str(&row[3])
+                    .unwrap_or("")
+                    .split(',')
+                    .map(|s| s.to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect(),
                 embedding: vec![],
                 mention_count: get_i64(&row[4]).unwrap_or(0) as u64,
                 first_seen: crate::domain::types::Timestamp(get_i64(&row[5]).unwrap_or(0)),
@@ -959,10 +1322,13 @@ impl Database {
 }
 
 pub fn merge_chunks(observation_id: u64, db: &Database) -> Option<Observation> {
-    let rows = db.backend.query(
-        "SELECT content FROM chunks WHERE observation_id = ?1 ORDER BY seq ASC",
-        &[rusqlite::types::Value::Integer(observation_id as i64)],
-    ).ok()?;
+    let rows = db
+        .backend
+        .query(
+            "SELECT content FROM chunks WHERE observation_id = ?1 ORDER BY seq ASC",
+            &[rusqlite::types::Value::Integer(observation_id as i64)],
+        )
+        .ok()?;
 
     let mut full_content = String::new();
     for row in &rows {
@@ -989,7 +1355,10 @@ pub fn merge_chunks(observation_id: u64, db: &Database) -> Option<Observation> {
 }
 
 pub(crate) fn get_i64(v: &rusqlite::types::Value) -> Option<i64> {
-    match v { rusqlite::types::Value::Integer(i) => Some(*i), _ => None }
+    match v {
+        rusqlite::types::Value::Integer(i) => Some(*i),
+        _ => None,
+    }
 }
 
 pub(crate) fn get_f64(v: &rusqlite::types::Value) -> Option<f64> {
@@ -1001,11 +1370,17 @@ pub(crate) fn get_f64(v: &rusqlite::types::Value) -> Option<f64> {
 }
 
 pub(crate) fn get_str<'a>(v: &'a rusqlite::types::Value) -> Option<&'a str> {
-    match v { rusqlite::types::Value::Text(s) => Some(s.as_str()), _ => None }
+    match v {
+        rusqlite::types::Value::Text(s) => Some(s.as_str()),
+        _ => None,
+    }
 }
 
 pub(crate) fn get_blob<'a>(v: &'a rusqlite::types::Value) -> Option<&'a [u8]> {
-    match v { rusqlite::types::Value::Blob(b) => Some(b.as_slice()), _ => None }
+    match v {
+        rusqlite::types::Value::Blob(b) => Some(b.as_slice()),
+        _ => None,
+    }
 }
 
 fn row_to_observation(row: &[rusqlite::types::Value]) -> Result<Observation, String> {
@@ -1015,8 +1390,21 @@ fn row_to_observation(row: &[rusqlite::types::Value]) -> Result<Observation, Str
         title: get_str(&row[2]).unwrap_or("").to_string(),
         summary: get_str(&row[3]).unwrap_or("").to_string(),
         content: get_str(&row[4]).unwrap_or("").to_string(),
-        project: get_str(&row[5]).map(|s| if s.is_empty() { None } else { Some(s.to_string()) }).unwrap_or(None),
-        tags: get_str(&row[6]).unwrap_or("").split(',').map(|s| s.to_string()).filter(|s| !s.is_empty()).collect(),
+        project: get_str(&row[5])
+            .map(|s| {
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
+            })
+            .unwrap_or(None),
+        tags: get_str(&row[6])
+            .unwrap_or("")
+            .split(',')
+            .map(|s| s.to_string())
+            .filter(|s| !s.is_empty())
+            .collect(),
         created_at: crate::domain::types::Timestamp(get_i64(&row[7]).unwrap_or(0)),
         observation_type: parse_obs_type(get_str(&row[8]).unwrap_or("")),
         importance: get_f64(&row[9]).unwrap_or(0.0) as f32,
@@ -1073,16 +1461,26 @@ fn parse_relation_type(s: &str) -> RelationType {
 }
 
 fn text_match_score(query: &str, title: &str, content: &str) -> f64 {
-    if query.is_empty() { return 1.0; }
+    if query.is_empty() {
+        return 1.0;
+    }
     let q = query.to_lowercase();
     let mut score = 0.0;
     let tl = title.to_lowercase();
     let cl = content.to_lowercase();
-    if tl.contains(&q) { score += 10.0; }
-    if tl.starts_with(&q) { score += 5.0; }
-    if cl.contains(&q) { score += 3.0; }
+    if tl.contains(&q) {
+        score += 10.0;
+    }
+    if tl.starts_with(&q) {
+        score += 5.0;
+    }
+    if cl.contains(&q) {
+        score += 3.0;
+    }
     for word in q.split_whitespace() {
-        if tl.contains(word) { score += 1.0; }
+        if tl.contains(word) {
+            score += 1.0;
+        }
         score += cl.matches(word).count() as f64 * 0.5;
     }
     score

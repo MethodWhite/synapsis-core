@@ -4,7 +4,11 @@ use crate::domain::types::ObservationId;
 /// Low-level storage backend abstraction supporting multiple database engines.
 pub trait StorageBackend: Send + Sync {
     fn execute(&self, sql: &str, params: &[rusqlite::types::Value]) -> Result<u64, String>;
-    fn query(&self, sql: &str, params: &[rusqlite::types::Value]) -> Result<Vec<Vec<rusqlite::types::Value>>, String>;
+    fn query(
+        &self,
+        sql: &str,
+        params: &[rusqlite::types::Value],
+    ) -> Result<Vec<Vec<rusqlite::types::Value>>, String>;
     fn execute_batch(&self, sql: &str) -> Result<(), String>;
     fn as_any(&self) -> &dyn std::any::Any;
 }
@@ -19,8 +23,14 @@ pub trait StoragePort: Send + Sync {
 
 pub trait MemoryPort: Send + Sync {
     fn save_memory(&self, memory: &MemoryEntry) -> Result<(), String>;
-    fn search_fts(&self, query: &str, project: Option<&str>, limit: i32, max_tokens: Option<u32>) -> Result<Vec<serde_json::Value>, String>;
-    fn retain(&self, max_tokens: u64) -> Result<u64, String>;  // evict lowest-priority entries, return freed tokens
+    fn search_fts(
+        &self,
+        query: &str,
+        project: Option<&str>,
+        limit: i32,
+        max_tokens: Option<u32>,
+    ) -> Result<Vec<serde_json::Value>, String>;
+    fn retain(&self, max_tokens: u64) -> Result<u64, String>; // evict lowest-priority entries, return freed tokens
     fn stats(&self) -> Result<MemoryStats, String>;
 }
 
@@ -35,11 +45,11 @@ pub struct MemoryStats {
 }
 use serde::{Deserialize, Serialize};
 
-pub use crate::domain::types::ObservationType;
 pub use crate::domain::entities::Observation;
 pub use crate::domain::entities::SearchParams;
 pub use crate::domain::entities::SearchResult;
 pub use crate::domain::models::agent::AgentStatus;
+pub use crate::domain::types::ObservationType;
 
 // Legacy compatibility stubs
 pub trait SessionPort: Send + Sync {}

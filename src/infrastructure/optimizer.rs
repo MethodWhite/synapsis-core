@@ -1,6 +1,6 @@
-use std::time::Instant;
-use crate::domain::entities::{SearchParams, summarize};
+use crate::domain::entities::{summarize, SearchParams};
 use crate::infrastructure::database::Database;
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct OptimizationStats {
@@ -54,7 +54,11 @@ impl AutoOptimizer {
 
         for obs in &all_obs {
             if obs.token_count > threshold {
-                let new_summary = summarize(&obs.title, &obs.content, (self.token_budget / 200).max(10) as usize);
+                let new_summary = summarize(
+                    &obs.title,
+                    &obs.content,
+                    (self.token_budget / 200).max(10) as usize,
+                );
                 db.update_summary(obs.id, &new_summary)?;
                 entries_summarized += 1;
             }
@@ -83,8 +87,16 @@ impl AutoOptimizer {
     pub fn auto_tune_budget(&self, db: &Database, target_latency_ms: u64) -> Result<u64, String> {
         let mut budget = self.token_budget;
         let queries = [
-            "memory", "data", "system", "learning", "network",
-            "algorithm", "processing", "optimization", "storage", "query",
+            "memory",
+            "data",
+            "system",
+            "learning",
+            "network",
+            "algorithm",
+            "processing",
+            "optimization",
+            "storage",
+            "query",
         ];
 
         for _ in 0..10 {
@@ -109,7 +121,11 @@ impl AutoOptimizer {
         Ok(budget)
     }
 
-    pub fn schedule(&self, db: &Database, _interval_minutes: u64) -> Result<OptimizationStats, String> {
+    pub fn schedule(
+        &self,
+        db: &Database,
+        _interval_minutes: u64,
+    ) -> Result<OptimizationStats, String> {
         self.optimize(db)
     }
 }

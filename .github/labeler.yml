@@ -1,18 +1,21 @@
 # Auto-label PRs by changed files
-'feat':
-  - src/**/*.rs
-  - Cargo.toml
+# Each label maps to an array of glob patterns
 
-'fix':
-  - src/**/*.rs
+core:
+  - src/core/**/*
 
-'docs':
-  - '**/*.md'
-  - '**/docs/**'
+db:
+  - src/infrastructure/database/**/*
 
-'ci':
-  - .github/workflows/**/*
+auth:
+  - src/core/auth/**/*
+
+ci:
   - .github/**/*
 
-'test':
+docs:
+  - '**/*.md'
+  - docs/**/*
+
+test:
   - tests/**/*
