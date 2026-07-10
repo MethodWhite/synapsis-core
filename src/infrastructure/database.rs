@@ -3,11 +3,34 @@ use crate::domain::entities::{
     MemoryEntry, Observation, Relation, RelationType, SearchParams, SearchResult, SessionInfo,
 };
 use crate::domain::ports::StoragePort;
+use crate::domain::ports::DbValue;
 use crate::domain::ports::StorageBackend;
 use crate::domain::types::{ObservationId, ObservationType};
 use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::sync::Mutex;
+
+// ── DbValue ↔ rusqlite conversion ──────────────────────────────────
+
+fn dbvalue_to_rusqlite(v: &DbValue) -> rusqlite::types::Value {
+    match v {
+        DbValue::Null => rusqlite::types::Value::Null,
+        DbValue::Integer(i) => rusqlite::types::Value::Integer(*i),
+        DbValue::Real(f) => rusqlite::types::Value::Real(*f),
+        DbValue::Text(s) => rusqlite::types::Value::Text(s.clone()),
+        DbValue::Blob(b) => rusqlite::types::Value::Blob(b.clone()),
+    }
+}
+
+fn rusqlite_to_dbvalue(v: &rusqlite::types::Value) -> DbValue {
+    match v {
+        rusqlite::types::Value::Null => DbValue::Null,
+        rusqlite::types::Value::Integer(i) => DbValue::Integer(*i),
+        rusqlite::types::Value::Real(f) => DbValue::Real(*f),
+        rusqlite::types::Value::Text(s) => DbValue::Text(s.clone()),
+        rusqlite::types::Value::Blob(b) => DbValue::Blob(b.clone()),
+    }
+}
 
 #[derive(Debug)]
 pub struct SqliteBackend {
@@ -31,9 +54,10 @@ impl StorageBackend for SqliteBackend {
         self
     }
 
-    fn execute(&self, sql: &str, params: &[rusqlite::types::Value]) -> Result<u64, String> {
+    fn execute(&self, sql: &str, params: &[DbValue]) -> Result<u64, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        conn.execute(sql, rusqlite::params_from_iter(params.iter()))
+        let rp: Vec<rusqlite::types::Value> = params.iter().map(dbvalue_to_rusqlite).collect();
+        conn.execute(sql, rusqlite::params_from_iter(rp.iter()))
             .map(|c| c as u64)
             .map_err(|e| e.to_string())
     }
@@ -41,16 +65,17 @@ impl StorageBackend for SqliteBackend {
     fn query(
         &self,
         sql: &str,
-        params: &[rusqlite::types::Value],
-    ) -> Result<Vec<Vec<rusqlite::types::Value>>, String> {
+        params: &[DbValue],
+    ) -> Result<Vec<Vec<DbValue>>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
         let col_count = stmt.column_count();
+        let rp: Vec<rusqlite::types::Value> = params.iter().map(dbvalue_to_rusqlite).collect();
         let rows = stmt
-            .query_map(rusqlite::params_from_iter(params.iter()), |row| {
+            .query_map(rusqlite::params_from_iter(rp.iter()), |row| {
                 let mut values = Vec::with_capacity(col_count);
                 for i in 0..col_count {
-                    values.push(row.get::<_, rusqlite::types::Value>(i)?);
+                    values.push(rusqlite_to_dbvalue(&row.get::<_, rusqlite::types::Value>(i)?));
                 }
                 Ok(values)
             })
@@ -99,7 +124,7 @@ impl StorageBackend for PgBackend {
         self
     }
 
-    fn execute(&self, sql: &str, params: &[rusqlite::types::Value]) -> Result<u64, String> {
+    fn execute(&self, sql: &str, params: &[DbValue]) -> Result<u64, String> {
         let client = self
             .rt
             .block_on(self.pool.get())
@@ -115,8 +140,8 @@ impl StorageBackend for PgBackend {
     fn query(
         &self,
         sql: &str,
-        params: &[rusqlite::types::Value],
-    ) -> Result<Vec<Vec<rusqlite::types::Value>>, String> {
+        params: &[DbValue],
+    ) -> Result<Vec<Vec<DbValue>>, String> {
         let client = self
             .rt
             .block_on(self.pool.get())
@@ -162,24 +187,24 @@ impl StorageBackend for PgBackend {
 
 #[cfg(feature = "postgres")]
 fn pg_params_from_values(
-    params: &[rusqlite::types::Value],
+    params: &[DbValue],
 ) -> Vec<Box<dyn tokio_postgres::types::ToSql + Sync>> {
     params
         .iter()
         .map(|v| match v {
-            rusqlite::types::Value::Null => {
+            DbValue::Null => {
                 Box::new(None::<i64>) as Box<dyn tokio_postgres::types::ToSql + Sync>
             }
-            rusqlite::types::Value::Integer(i) => {
+            DbValue::Integer(i) => {
                 Box::new(*i) as Box<dyn tokio_postgres::types::ToSql + Sync>
             }
-            rusqlite::types::Value::Real(f) => {
+            DbValue::Real(f) => {
                 Box::new(*f) as Box<dyn tokio_postgres::types::ToSql + Sync>
             }
-            rusqlite::types::Value::Text(s) => {
+            DbValue::Text(s) => {
                 Box::new(s.clone()) as Box<dyn tokio_postgres::types::ToSql + Sync>
             }
-            rusqlite::types::Value::Blob(b) => {
+            DbValue::Blob(b) => {
                 Box::new(b.clone()) as Box<dyn tokio_postgres::types::ToSql + Sync>
             }
         })
@@ -187,45 +212,45 @@ fn pg_params_from_values(
 }
 
 #[cfg(feature = "postgres")]
-fn pg_value_from_row(row: &tokio_postgres::Row, idx: usize) -> rusqlite::types::Value {
+fn pg_value_from_row(row: &tokio_postgres::Row, idx: usize) -> DbValue {
     if let Some(column) = row.columns().get(idx) {
         match column.type_().name() {
             "int2" | "smallint" => row
                 .try_get::<_, i16>(idx)
-                .map(|v| rusqlite::types::Value::Integer(v as i64))
-                .unwrap_or(rusqlite::types::Value::Null),
+                .map(|v| DbValue::Integer(v as i64))
+                .unwrap_or(DbValue::Null),
             "int4" | "integer" => row
                 .try_get::<_, i32>(idx)
-                .map(|v| rusqlite::types::Value::Integer(v as i64))
-                .unwrap_or(rusqlite::types::Value::Null),
+                .map(|v| DbValue::Integer(v as i64))
+                .unwrap_or(DbValue::Null),
             "int8" | "bigint" => row
                 .try_get::<_, i64>(idx)
-                .map(rusqlite::types::Value::Integer)
-                .unwrap_or(rusqlite::types::Value::Null),
+                .map(DbValue::Integer)
+                .unwrap_or(DbValue::Null),
             "float4" | "real" => row
                 .try_get::<_, f32>(idx)
-                .map(|v| rusqlite::types::Value::Real(v as f64))
-                .unwrap_or(rusqlite::types::Value::Null),
+                .map(|v| DbValue::Real(v as f64))
+                .unwrap_or(DbValue::Null),
             "float8" | "double precision" => row
                 .try_get::<_, f64>(idx)
-                .map(rusqlite::types::Value::Real)
-                .unwrap_or(rusqlite::types::Value::Null),
+                .map(DbValue::Real)
+                .unwrap_or(DbValue::Null),
             "text" | "varchar" | "bpchar" | "name" => row
                 .try_get::<_, String>(idx)
-                .map(rusqlite::types::Value::Text)
-                .unwrap_or(rusqlite::types::Value::Null),
+                .map(DbValue::Text)
+                .unwrap_or(DbValue::Null),
             "bytea" => row
                 .try_get::<_, Vec<u8>>(idx)
-                .map(rusqlite::types::Value::Blob)
-                .unwrap_or(rusqlite::types::Value::Null),
+                .map(DbValue::Blob)
+                .unwrap_or(DbValue::Null),
             "bool" | "boolean" => row
                 .try_get::<_, bool>(idx)
-                .map(|v| rusqlite::types::Value::Integer(if v { 1 } else { 0 }))
-                .unwrap_or(rusqlite::types::Value::Null),
-            _ => rusqlite::types::Value::Null,
+                .map(|v| DbValue::Integer(if v { 1 } else { 0 }))
+                .unwrap_or(DbValue::Null),
+            _ => DbValue::Null,
         }
     } else {
-        rusqlite::types::Value::Null
+        DbValue::Null
     }
 }
 
@@ -304,7 +329,7 @@ impl Database {
             .first()
             .and_then(|row| row.first())
             .and_then(|v| {
-                if let rusqlite::types::Value::Integer(i) = v {
+                if let DbValue::Integer(i) = v {
                     Some(*i)
                 } else {
                     None
@@ -458,15 +483,15 @@ impl Database {
             "INSERT INTO observations (session_id, title, summary, content, project, tags, obs_type, importance, token_count)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             &[
-                rusqlite::types::Value::Text(obs.session_id.clone()),
-                rusqlite::types::Value::Text(obs.title.clone()),
-                rusqlite::types::Value::Text(obs.summary.clone()),
-                rusqlite::types::Value::Text(obs.content.clone()),
-                obs.project.as_ref().map(|p| rusqlite::types::Value::Text(p.clone())).unwrap_or(rusqlite::types::Value::Null),
-                rusqlite::types::Value::Text(tags_str),
-                rusqlite::types::Value::Text(format!("{:?}", obs.observation_type)),
-                rusqlite::types::Value::Real(obs.importance as f64),
-                rusqlite::types::Value::Integer(obs.token_count as i64),
+                DbValue::Text(obs.session_id.clone()),
+                DbValue::Text(obs.title.clone()),
+                DbValue::Text(obs.summary.clone()),
+                DbValue::Text(obs.content.clone()),
+                obs.project.as_ref().map(|p| DbValue::Text(p.clone())).unwrap_or(DbValue::Null),
+                DbValue::Text(tags_str),
+                DbValue::Text(format!("{:?}", obs.observation_type)),
+                DbValue::Real(obs.importance as f64),
+                DbValue::Integer(obs.token_count as i64),
             ],
         )?;
         let rows = self.backend.query("SELECT last_insert_rowid()", &[])?;
@@ -476,11 +501,11 @@ impl Database {
         self.backend.execute(
             "INSERT INTO observations_fts(rowid, title, summary, content, project) VALUES (?1, ?2, ?3, ?4, ?5)",
             &[
-                rusqlite::types::Value::Integer(id),
-                rusqlite::types::Value::Text(obs.title.clone()),
-                rusqlite::types::Value::Text(obs.summary.clone()),
-                rusqlite::types::Value::Text(obs.content.clone()),
-                obs.project.as_ref().map(|p| rusqlite::types::Value::Text(p.clone())).unwrap_or(rusqlite::types::Value::Text(String::new())),
+                DbValue::Integer(id),
+                DbValue::Text(obs.title.clone()),
+                DbValue::Text(obs.summary.clone()),
+                DbValue::Text(obs.content.clone()),
+                obs.project.as_ref().map(|p| DbValue::Text(p.clone())).unwrap_or(DbValue::Text(String::new())),
             ],
         )?;
 
@@ -490,8 +515,8 @@ impl Database {
         self.backend.execute(
             "INSERT OR REPLACE INTO embeddings (observation_id, vector) VALUES (?1, ?2)",
             &[
-                rusqlite::types::Value::Integer(id),
-                rusqlite::types::Value::Blob(blob),
+                DbValue::Integer(id),
+                DbValue::Blob(blob),
             ],
         )?;
         let mut obs_clone = obs.clone();
@@ -503,12 +528,12 @@ impl Database {
                 "INSERT INTO chunks (observation_id, content, summary, token_count, embedding, seq)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 &[
-                    rusqlite::types::Value::Integer(chunk.observation_id as i64),
-                    rusqlite::types::Value::Text(chunk.content.clone()),
-                    rusqlite::types::Value::Text(chunk.summary.clone()),
-                    rusqlite::types::Value::Integer(chunk.token_count as i64),
-                    rusqlite::types::Value::Blob(emb_blob),
-                    rusqlite::types::Value::Integer(chunk.seq as i64),
+                    DbValue::Integer(chunk.observation_id as i64),
+                    DbValue::Text(chunk.content.clone()),
+                    DbValue::Text(chunk.summary.clone()),
+                    DbValue::Integer(chunk.token_count as i64),
+                    DbValue::Blob(emb_blob),
+                    DbValue::Integer(chunk.seq as i64),
                 ],
             )?;
         }
@@ -527,10 +552,10 @@ impl Database {
                     mention_count = mention_count + 1,
                     last_seen = ?4",
                 &[
-                    rusqlite::types::Value::Text(name.clone()),
-                    rusqlite::types::Value::Text(format!("{:?}", entity_type)),
-                    rusqlite::types::Value::Blob(emb_blob),
-                    rusqlite::types::Value::Integer(now),
+                    DbValue::Text(name.clone()),
+                    DbValue::Text(format!("{:?}", entity_type)),
+                    DbValue::Blob(emb_blob),
+                    DbValue::Integer(now),
                 ],
             )?;
         }
@@ -540,11 +565,11 @@ impl Database {
             let tgt_name = &entity_list[tgt_idx].0;
             let src_rows = self.backend.query(
                 "SELECT id FROM entities WHERE name = ?1",
-                &[rusqlite::types::Value::Text(src_name.clone())],
+                &[DbValue::Text(src_name.clone())],
             )?;
             let tgt_rows = self.backend.query(
                 "SELECT id FROM entities WHERE name = ?1",
-                &[rusqlite::types::Value::Text(tgt_name.clone())],
+                &[DbValue::Text(tgt_name.clone())],
             )?;
             let src_id = src_rows
                 .first()
@@ -560,12 +585,12 @@ impl Database {
                 "INSERT INTO relations (source_id, target_id, relation_type, weight, observation_id, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 &[
-                    rusqlite::types::Value::Integer(src_id),
-                    rusqlite::types::Value::Integer(tgt_id),
-                    rusqlite::types::Value::Text(format!("{:?}", rel_type)),
-                    rusqlite::types::Value::Real(weight as f64),
-                    rusqlite::types::Value::Integer(id),
-                    rusqlite::types::Value::Integer(now),
+                    DbValue::Integer(src_id),
+                    DbValue::Integer(tgt_id),
+                    DbValue::Text(format!("{:?}", rel_type)),
+                    DbValue::Real(weight as f64),
+                    DbValue::Integer(id),
+                    DbValue::Integer(now),
                 ],
             )?;
         }
@@ -582,7 +607,7 @@ impl Database {
         let rows = self.backend.query(
             "SELECT id, session_id, title, summary, content, project, tags, created_at, obs_type, importance, token_count, access_count
              FROM observations WHERE importance >= ?1 ORDER BY importance DESC",
-            &[rusqlite::types::Value::Real(min_imp as f64)],
+            &[DbValue::Real(min_imp as f64)],
         )?;
 
         let mut results: Vec<SearchResult> = Vec::new();
@@ -597,7 +622,7 @@ impl Database {
                 let text_score = text_match_score(&query, &obs.title, &obs.content);
                 let emb_rows = self.backend.query(
                     "SELECT vector FROM embeddings WHERE observation_id = ?1",
-                    &[rusqlite::types::Value::Integer(obs.id.0)],
+                    &[DbValue::Integer(obs.id.0)],
                 )?;
                 let semantic_score = emb_rows
                     .first()
@@ -661,7 +686,7 @@ impl Database {
                     "SELECT c.id, c.observation_id, c.embedding, c.content
                      FROM chunks c JOIN observations o ON c.observation_id = o.id
                      WHERE o.importance >= ?1",
-                    &[rusqlite::types::Value::Real(min_imp as f64)],
+                    &[DbValue::Real(min_imp as f64)],
                 )?;
                 let mut obs_scores: std::collections::HashMap<i64, (f64, Vec<u64>)> =
                     std::collections::HashMap::new();
@@ -691,7 +716,7 @@ impl Database {
                     let obs_rows = self.backend.query(
                         "SELECT id, session_id, title, summary, content, project, tags, created_at, obs_type, importance, token_count, access_count
                          FROM observations WHERE id = ?1",
-                        &[rusqlite::types::Value::Integer(oid)],
+                        &[DbValue::Integer(oid)],
                     )?;
                     if let Some(orow) = obs_rows.first() {
                         if let Ok(obs) = row_to_observation(orow) {
@@ -714,8 +739,8 @@ impl Database {
                      WHERE LOWER(c.content) LIKE ?1 AND o.importance >= ?2
                      ORDER BY c.id",
                     &[
-                        rusqlite::types::Value::Text(like),
-                        rusqlite::types::Value::Real(min_imp as f64),
+                        DbValue::Text(like),
+                        DbValue::Real(min_imp as f64),
                     ],
                 )?;
                 let mut obs_chunks: std::collections::HashMap<i64, Vec<u64>> =
@@ -732,7 +757,7 @@ impl Database {
                     let obs_rows = self.backend.query(
                         "SELECT id, session_id, title, summary, content, project, tags, created_at, obs_type, importance, token_count, access_count
                          FROM observations WHERE id = ?1",
-                        &[rusqlite::types::Value::Integer(*oid)],
+                        &[DbValue::Integer(*oid)],
                     )?;
                     if let Some(orow) = obs_rows.first() {
                         if let Ok(obs) = row_to_observation(orow) {
@@ -772,7 +797,7 @@ impl Database {
         let rows = self.backend.query(
             "SELECT id, session_id, title, summary, content, project, tags, created_at, obs_type, importance, token_count, access_count
              FROM observations ORDER BY created_at DESC LIMIT ?1",
-            &[rusqlite::types::Value::Integer(limit as i64)],
+            &[DbValue::Integer(limit as i64)],
         )?;
 
         let mut results = Vec::new();
@@ -786,7 +811,7 @@ impl Database {
         let rows = self.backend.query(
             "SELECT id, session_id, title, summary, content, project, tags, created_at, obs_type, importance, token_count, access_count
              FROM observations WHERE id = ?1",
-            &[rusqlite::types::Value::Integer(id)],
+            &[DbValue::Integer(id)],
         )?;
 
         match rows.first() {
@@ -798,11 +823,11 @@ impl Database {
     fn delete_impl(&self, id: i64) -> Result<(), String> {
         self.backend.execute(
             "DELETE FROM observations_fts WHERE rowid = ?1",
-            &[rusqlite::types::Value::Integer(id)],
+            &[DbValue::Integer(id)],
         ).ok();
         self.backend.execute(
             "DELETE FROM observations WHERE id = ?1",
-            &[rusqlite::types::Value::Integer(id)],
+            &[DbValue::Integer(id)],
         )?;
         Ok(())
     }
@@ -851,12 +876,12 @@ impl Database {
             "INSERT INTO observations (session_id, title, summary, content, obs_type, importance, token_count)
              VALUES (?1, ?2, ?3, ?4, 'Memory', ?5, ?6)",
             &[
-                rusqlite::types::Value::Text(memory.session_id.as_str().to_string()),
-                rusqlite::types::Value::Text(title.clone()),
-                rusqlite::types::Value::Text(summarize(&title, &memory.content, 30)),
-                rusqlite::types::Value::Text(memory.content.clone()),
-                rusqlite::types::Value::Real(importance as f64),
-                rusqlite::types::Value::Integer(token_count as i64),
+                DbValue::Text(memory.session_id.as_str().to_string()),
+                DbValue::Text(title.clone()),
+                DbValue::Text(summarize(&title, &memory.content, 30)),
+                DbValue::Text(memory.content.clone()),
+                DbValue::Real(importance as f64),
+                DbValue::Integer(token_count as i64),
             ],
         )?;
         Ok(())
@@ -903,14 +928,14 @@ impl Database {
             self.backend.query(
                 &sql,
                 &[
-                    rusqlite::types::Value::Text(query.to_string()),
-                    rusqlite::types::Value::Text(p.to_string()),
+                    DbValue::Text(query.to_string()),
+                    DbValue::Text(p.to_string()),
                 ],
             )?
         } else {
             self.backend.query(
                 &sql,
-                &[rusqlite::types::Value::Text(query.to_string())],
+                &[DbValue::Text(query.to_string())],
             )?
         };
 
@@ -958,7 +983,7 @@ impl Database {
             "DELETE FROM observations WHERE id IN (
                 SELECT id FROM observations ORDER BY importance ASC, access_count ASC LIMIT 1000
             ) AND (SELECT COALESCE(SUM(token_count), 0) FROM observations) > ?1",
-            &[rusqlite::types::Value::Integer(max_tokens as i64)],
+            &[DbValue::Integer(max_tokens as i64)],
         )?;
 
         Ok(excess)
@@ -1173,8 +1198,8 @@ impl Database {
         self.backend.execute(
             "UPDATE observations SET summary = ?1 WHERE id = ?2",
             &[
-                rusqlite::types::Value::Text(summary.to_string()),
-                rusqlite::types::Value::Integer(id.0),
+                DbValue::Text(summary.to_string()),
+                DbValue::Integer(id.0),
             ],
         )?;
         Ok(())
@@ -1213,10 +1238,10 @@ impl Database {
                     mention_count = mention_count + 1,
                     last_seen = ?4",
                 &[
-                    rusqlite::types::Value::Text(name.clone()),
-                    rusqlite::types::Value::Text(format!("{:?}", entity_type)),
-                    rusqlite::types::Value::Blob(emb_blob),
-                    rusqlite::types::Value::Integer(now),
+                    DbValue::Text(name.clone()),
+                    DbValue::Text(format!("{:?}", entity_type)),
+                    DbValue::Blob(emb_blob),
+                    DbValue::Integer(now),
                 ],
             )?;
         }
@@ -1226,11 +1251,11 @@ impl Database {
             let tgt_name = &entity_list[tgt_idx].0;
             let src_rows = self.backend.query(
                 "SELECT id FROM entities WHERE name = ?1",
-                &[rusqlite::types::Value::Text(src_name.clone())],
+                &[DbValue::Text(src_name.clone())],
             )?;
             let tgt_rows = self.backend.query(
                 "SELECT id FROM entities WHERE name = ?1",
-                &[rusqlite::types::Value::Text(tgt_name.clone())],
+                &[DbValue::Text(tgt_name.clone())],
             )?;
             let src_id = src_rows
                 .first()
@@ -1246,12 +1271,12 @@ impl Database {
                 "INSERT INTO relations (source_id, target_id, relation_type, weight, observation_id, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 &[
-                    rusqlite::types::Value::Integer(src_id),
-                    rusqlite::types::Value::Integer(tgt_id),
-                    rusqlite::types::Value::Text(format!("{:?}", rel_type)),
-                    rusqlite::types::Value::Real(weight as f64),
-                    rusqlite::types::Value::Integer(observation_id as i64),
-                    rusqlite::types::Value::Integer(now),
+                    DbValue::Integer(src_id),
+                    DbValue::Integer(tgt_id),
+                    DbValue::Text(format!("{:?}", rel_type)),
+                    DbValue::Real(weight as f64),
+                    DbValue::Integer(observation_id as i64),
+                    DbValue::Integer(now),
                 ],
             )?;
         }
@@ -1267,7 +1292,7 @@ impl Database {
     ) -> Result<Vec<(Entity, Relation, Entity)>, String> {
         let root_rows = self.backend.query(
             "SELECT id FROM entities WHERE name = ?1",
-            &[rusqlite::types::Value::Text(entity_name.to_string())],
+            &[DbValue::Text(entity_name.to_string())],
         )?;
 
         let root_id = root_rows.first().map(|r| get_i64(&r[0])).flatten();
@@ -1297,8 +1322,8 @@ impl Database {
                  JOIN entities e2 ON r.target_id = e2.id
                  WHERE (r.source_id = ?1 OR r.target_id = ?1) AND r.weight >= ?2",
                 &[
-                    rusqlite::types::Value::Integer(current_id),
-                    rusqlite::types::Value::Real(min_weight as f64),
+                    DbValue::Integer(current_id),
+                    DbValue::Real(min_weight as f64),
                 ],
             )?;
 
@@ -1372,8 +1397,8 @@ impl Database {
                       FROM entities WHERE (name LIKE ?1 OR aliases LIKE ?1) AND entity_type = ?2"
                 ),
                 vec![
-                    rusqlite::types::Value::Text(like),
-                    rusqlite::types::Value::Text(format!("{:?}", et)),
+                    DbValue::Text(like),
+                    DbValue::Text(format!("{:?}", et)),
                 ],
             )
         } else {
@@ -1382,7 +1407,7 @@ impl Database {
                     "SELECT id, name, entity_type, aliases, mention_count, first_seen, last_seen
                       FROM entities WHERE name LIKE ?1 OR aliases LIKE ?1"
                 ),
-                vec![rusqlite::types::Value::Text(like)],
+                vec![DbValue::Text(like)],
             )
         };
 
@@ -1414,7 +1439,7 @@ pub fn merge_chunks(observation_id: u64, db: &Database) -> Option<Observation> {
         .backend
         .query(
             "SELECT content FROM chunks WHERE observation_id = ?1 ORDER BY seq ASC",
-            &[rusqlite::types::Value::Integer(observation_id as i64)],
+            &[DbValue::Integer(observation_id as i64)],
         )
         .ok()?;
 
@@ -1432,7 +1457,7 @@ pub fn merge_chunks(observation_id: u64, db: &Database) -> Option<Observation> {
     let obs_rows = db.backend.query(
         "SELECT id, session_id, title, summary, content, project, tags, created_at, obs_type, importance, token_count, access_count
          FROM observations WHERE id = ?1",
-        &[rusqlite::types::Value::Integer(observation_id as i64)],
+        &[DbValue::Integer(observation_id as i64)],
     ).ok()?;
 
     let row = obs_rows.first()?;
@@ -1442,36 +1467,36 @@ pub fn merge_chunks(observation_id: u64, db: &Database) -> Option<Observation> {
     })
 }
 
-pub(crate) fn get_i64(v: &rusqlite::types::Value) -> Option<i64> {
+pub(crate) fn get_i64(v: &DbValue) -> Option<i64> {
     match v {
-        rusqlite::types::Value::Integer(i) => Some(*i),
+        DbValue::Integer(i) => Some(*i),
         _ => None,
     }
 }
 
-pub(crate) fn get_f64(v: &rusqlite::types::Value) -> Option<f64> {
+pub(crate) fn get_f64(v: &DbValue) -> Option<f64> {
     match v {
-        rusqlite::types::Value::Real(f) => Some(*f),
-        rusqlite::types::Value::Integer(i) => Some(*i as f64),
+        DbValue::Real(f) => Some(*f),
+        DbValue::Integer(i) => Some(*i as f64),
         _ => None,
     }
 }
 
-pub(crate) fn get_str<'a>(v: &'a rusqlite::types::Value) -> Option<&'a str> {
+pub fn get_str<'a>(v: &'a DbValue) -> Option<&'a str> {
     match v {
-        rusqlite::types::Value::Text(s) => Some(s.as_str()),
+        DbValue::Text(s) => Some(s.as_str()),
         _ => None,
     }
 }
 
-pub(crate) fn get_blob<'a>(v: &'a rusqlite::types::Value) -> Option<&'a [u8]> {
+pub(crate) fn get_blob<'a>(v: &'a DbValue) -> Option<&'a [u8]> {
     match v {
-        rusqlite::types::Value::Blob(b) => Some(b.as_slice()),
+        DbValue::Blob(b) => Some(b.as_slice()),
         _ => None,
     }
 }
 
-fn row_to_observation(row: &[rusqlite::types::Value]) -> Result<Observation, String> {
+fn row_to_observation(row: &[DbValue]) -> Result<Observation, String> {
     Ok(Observation {
         id: ObservationId(get_i64(&row[0]).unwrap_or(0)),
         session_id: get_str(&row[1]).unwrap_or("").to_string(),
