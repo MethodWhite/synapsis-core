@@ -22,3 +22,16 @@ impl RateLimiter {
     }
     pub fn reset(&mut self) {}
 }
+
+#[derive(Debug)]
+pub enum RateLimitError {
+    TooManyRequests,
+}
+
+impl std::fmt::Display for RateLimitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            RateLimitError::TooManyRequests => write!(f, "Rate limit exceeded"),
+        }
+    }
+}

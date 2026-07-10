@@ -1,6 +1,50 @@
 // TODO: Implement anti-brick command validation.
 // All methods are currently stubs returning safe defaults.
 
+use serde::{Deserialize, Serialize};
+
+/// Risk levels for operations
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RiskLevel {
+    Safe = 0,
+    Low = 1,
+    Medium = 2,
+    High = 3,
+    Critical = 4,
+    Blocked = 5,
+}
+
+/// Types of destructive operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum BrickThreat {
+    DiskWrite { target: String, tool: String },
+    PartitionModify { disk: String, tool: String },
+    BootloaderAccess { device: String, command: String },
+    FilesystemDestroy { partition: String, tool: String },
+    MountOperation { path: String, operation: String },
+    FirmwareFlash { device: String, image_type: String },
+    BootloaderLock { device: String, action: String },
+    Suspicious { command: String, reason: String },
+}
+
+/// Audit log entry for anti-brick events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AntiBrickEvent {
+    pub id: u64,
+    pub timestamp: u64,
+    pub event_type: String,
+    pub threat: Option<BrickThreat>,
+    pub risk_level: RiskLevel,
+    pub command: String,
+    pub args: Vec<String>,
+    pub process_id: u32,
+    pub user: String,
+    pub blocked: bool,
+    pub ai_validated: bool,
+    pub ai_response: Option<String>,
+    pub hash: String,
+}
+
 /// Legacy alias
 pub type AntiBrickEngine = AntiBrick;
 #[derive(Debug, Clone)]
