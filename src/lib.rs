@@ -10,6 +10,8 @@
 //! - **core** — Business logic: anti-brick, audit, crypto provider, orchestrator, PQC, session, watchdog, zero-trust
 //! - **infrastructure** — SQLite database, plugin system, agent registry, skills, auto-optimizer
 
+pub use domain::ports::DbValue;
+
 pub mod core;
 pub mod domain;
 pub mod infrastructure;

@@ -4,6 +4,7 @@ use synapsis_core::domain::entities::{
 use synapsis_core::domain::ports::StorageBackend;
 use synapsis_core::domain::types::{ObservationType, SessionId};
 use synapsis_core::infrastructure::database::{get_str, Database, SqliteBackend};
+use synapsis_core::DbValue;
 
 fn setup_db() -> Database {
     let db = Database::new();
@@ -31,8 +32,8 @@ fn test_backend_trait_with_sqlite() {
         .execute(
             "UPDATE test SET val = ?1 WHERE id = ?2",
             &[
-                rusqlite::types::Value::Text("updated".into()),
-                rusqlite::types::Value::Integer(1),
+                DbValue::Text("updated".into()),
+                DbValue::Integer(1),
             ],
         )
         .unwrap();
