@@ -1,21 +1,23 @@
 # Auto-label PRs by changed files
-# Each label maps to an array of glob patterns
+# Format: actions/labeler v5
 
 core:
-  - src/core/**/*
+  - any:
+    - src/core/**/*
 
 db:
-  - src/infrastructure/database/**/*
-
-auth:
-  - src/core/auth/**/*
+  - any:
+    - src/infrastructure/database/**/*
 
 ci:
-  - .github/**/*
+  - any:
+    - .github/**/*
 
 docs:
-  - '**/*.md'
-  - docs/**/*
+  - any:
+    - '**/*.md'
+    - docs/**/*
 
 test:
-  - tests/**/*
+  - any:
+    - tests/**/*
