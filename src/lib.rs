@@ -673,7 +673,7 @@ mod tests {
 
         // Verify chunks were stored by querying directly via a new connection
         let chunk_count: i64 = {
-            let conn = db.get_conn();
+            let conn = db.get_conn().unwrap();
             let mut stmt = conn
                 .prepare("SELECT COUNT(*) FROM chunks WHERE observation_id = ?1")
                 .unwrap();

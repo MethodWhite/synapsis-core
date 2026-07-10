@@ -285,12 +285,12 @@ impl Database {
         Self { backend }
     }
 
-    pub fn get_conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+    pub fn get_conn(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
         self.backend
             .as_any()
             .downcast_ref::<SqliteBackend>()
-            .expect("get_conn() requires SQLite backend")
-            .conn_lock()
+            .map(|sb| sb.conn_lock())
+            .ok_or_else(|| "get_conn() requires SQLite backend".to_string())
     }
 
     pub fn init(&self) -> Result<(), String> {
@@ -796,6 +796,10 @@ impl Database {
 
     fn delete_impl(&self, id: i64) -> Result<(), String> {
         self.backend.execute(
+            "DELETE FROM observations_fts WHERE rowid = ?1",
+            &[rusqlite::types::Value::Integer(id)],
+        ).ok();
+        self.backend.execute(
             "DELETE FROM observations WHERE id = ?1",
             &[rusqlite::types::Value::Integer(id)],
         )?;
@@ -927,7 +931,7 @@ impl Database {
                 "id": id,
                 "title": title,
                 "summary": summary,
-                "content": if content.len() > 200 { format!("{}...", &content[..200]) } else { content },
+                "content": if content.len() > 200 { format!("{}...", content.chars().take(200).collect::<String>()) } else { content },
                 "importance": importance,
                 "token_count": token_count,
                 "score": score,
@@ -949,12 +953,12 @@ impl Database {
         }
 
         let excess = (total as u64) - max_tokens;
-        self.backend.execute_batch(&format!(
+        self.backend.execute(
             "DELETE FROM observations WHERE id IN (
                 SELECT id FROM observations ORDER BY importance ASC, access_count ASC LIMIT 1000
-            ) AND (SELECT COALESCE(SUM(token_count), 0) FROM observations) > {}",
-            max_tokens
-        ))?;
+            ) AND (SELECT COALESCE(SUM(token_count), 0) FROM observations) > ?1",
+            &[rusqlite::types::Value::Integer(max_tokens as i64)],
+        )?;
 
         Ok(excess)
     }
@@ -1504,7 +1508,20 @@ fn parse_obs_type(s: &str) -> ObservationType {
         "Note" => ObservationType::Note,
         "Learning" => ObservationType::Learning,
         "Decision" => ObservationType::Decision,
-        _ => ObservationType::Note,
+        "Manual" => ObservationType::Manual,
+        "ToolUse" => ObservationType::ToolUse,
+        "Search" => ObservationType::Search,
+        "FileChange" => ObservationType::FileChange,
+        "Command" => ObservationType::Command,
+        "Pattern" => ObservationType::Pattern,
+        "Config" => ObservationType::Config,
+        "Bugfix" => ObservationType::Bugfix,
+        "Architecture" => ObservationType::Architecture,
+        "Discovery" => ObservationType::Discovery,
+        _ => {
+            eprintln!("[synapsis-core] Warning: unknown ObservationType '{}', defaulting to Note", s);
+            ObservationType::Note
+        }
     }
 }
 
