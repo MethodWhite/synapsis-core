@@ -1,6 +1,4 @@
-use synapsis_core::domain::entities::{
-    Observation, SearchParams,
-};
+use synapsis_core::domain::entities::{Observation, SearchParams};
 use synapsis_core::domain::ports::StorageBackend;
 use synapsis_core::domain::types::{ObservationType, SessionId};
 use synapsis_core::infrastructure::database::{get_str, Database, SqliteBackend};
@@ -31,10 +29,7 @@ fn test_backend_trait_with_sqlite() {
     let affected = backend
         .execute(
             "UPDATE test SET val = ?1 WHERE id = ?2",
-            &[
-                DbValue::Text("updated".into()),
-                DbValue::Integer(1),
-            ],
+            &[DbValue::Text("updated".into()), DbValue::Integer(1)],
         )
         .unwrap();
     assert_eq!(affected, 1);
@@ -259,8 +254,8 @@ fn benchmark_search_speed() {
 
     for i in 0..500 {
         let topic = topics[i % topics.len()];
-        let content = format!("{} is an important concept in modern systems. ", topic)
-            .repeat(5 + (i % 10));
+        let content =
+            format!("{} is an important concept in modern systems. ", topic).repeat(5 + (i % 10));
         let obs = Observation::new(
             SessionId::new("bench-speed"),
             ObservationType::Memory,
