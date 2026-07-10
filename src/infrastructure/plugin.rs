@@ -1,5 +1,4 @@
 use crate::domain::plugin::{PluginInfo, PluginManager as DomainPluginManager};
-use std::collections::HashMap;
 pub struct PluginManager(pub DomainPluginManager);
 impl PluginManager {
     pub fn new() -> Self {

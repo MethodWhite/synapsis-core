@@ -1,10 +1,9 @@
 use crate::domain::entities::{
-    chunk_text, compute_chunks, compute_embedding, compute_importance, cosine_similarity,
-    estimate_tokens, extract_entities, infer_relationships, summarize, Chunk, Entity, EntityType,
+    compute_chunks, compute_embedding, cosine_similarity, extract_entities, infer_relationships, summarize, Entity, EntityType,
     MemoryEntry, Observation, Relation, RelationType, SearchParams, SearchResult, SessionInfo,
 };
 use crate::domain::ports::StoragePort;
-use crate::domain::ports::{MemoryStats, StorageBackend};
+use crate::domain::ports::StorageBackend;
 use crate::domain::types::{ObservationId, ObservationType};
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -431,6 +430,24 @@ impl Database {
             self.backend.execute_batch("PRAGMA user_version = 2")?;
         }
 
+        if version < 3 {
+            // Add FTS5 full-text search virtual table
+            self.backend.execute_batch(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS observations_fts USING fts5(
+                    title, summary, content, project,
+                    content=observations,
+                    content_rowid=id,
+                    tokenize='porter unicode61'
+                )",
+            )?;
+            // Populate FTS index from existing data
+            self.backend.execute_batch(
+                "INSERT INTO observations_fts(rowid, title, summary, content, project)
+                 SELECT id, title, summary, content, COALESCE(project, '') FROM observations",
+            )?;
+            self.backend.execute_batch("PRAGMA user_version = 3")?;
+        }
+
         Ok(())
     }
 
@@ -453,6 +470,19 @@ impl Database {
         )?;
         let rows = self.backend.query("SELECT last_insert_rowid()", &[])?;
         let id = get_i64(&rows[0][0]).unwrap_or(0);
+
+        // Sync FTS5 index
+        self.backend.execute(
+            "INSERT INTO observations_fts(rowid, title, summary, content, project) VALUES (?1, ?2, ?3, ?4, ?5)",
+            &[
+                rusqlite::types::Value::Integer(id),
+                rusqlite::types::Value::Text(obs.title.clone()),
+                rusqlite::types::Value::Text(obs.summary.clone()),
+                rusqlite::types::Value::Text(obs.content.clone()),
+                obs.project.as_ref().map(|p| rusqlite::types::Value::Text(p.clone())).unwrap_or(rusqlite::types::Value::Text(String::new())),
+            ],
+        )?;
+
         let text = format!("{} {}", obs.title, obs.content);
         let embedding = compute_embedding(&text);
         let blob = serialize_embedding(&embedding);
@@ -827,31 +857,84 @@ impl Database {
         Ok(())
     }
 
+    /// Full-text search using FTS5 with BM25 ranking.
+    ///
+    /// Searches across title, summary, content, and project fields.
+    /// Results are ranked by FTS5 relevance and limited by token budget.
     pub fn search_fts(
         &self,
         query: &str,
-        _project: Option<&str>,
+        project: Option<&str>,
         limit: i32,
         max_tokens: Option<u32>,
     ) -> Result<Vec<Value>, String> {
-        let params = SearchParams::new(query)
-            .with_limit(limit)
-            .with_max_tokens(max_tokens.unwrap_or(1024));
-        let results = self.search_observations_impl(&params)?;
-        Ok(results
-            .into_iter()
-            .map(|r| {
-                json!({
-                    "id": r.observation.id.0,
-                    "title": r.observation.title,
-                    "summary": r.observation.summary,
-                    "content": r.observation.efficient_content(100),
-                    "importance": r.observation.importance,
-                    "token_count": r.observation.token_count,
-                    "score": r.score,
-                })
-            })
-            .collect())
+        let limit = limit.max(1).min(100) as usize;
+        let max_tokens = max_tokens.unwrap_or(1024) as i64;
+        let mut token_budget = max_tokens;
+
+        let sql = if let Some(_p) = project {
+            format!(
+                "SELECT o.id, o.title, o.summary, o.content, o.importance, o.token_count,
+                        bm25(observations_fts, 0.0, 1.0, 1.0, 2.0) AS score
+                 FROM observations_fts
+                 JOIN observations o ON o.id = observations_fts.rowid
+                 WHERE observations_fts MATCH ?1 AND o.project = ?2
+                 ORDER BY score DESC LIMIT {}",
+                limit * 2
+            )
+        } else {
+            format!(
+                "SELECT o.id, o.title, o.summary, o.content, o.importance, o.token_count,
+                        bm25(observations_fts, 0.0, 1.0, 1.0, 2.0) AS score
+                 FROM observations_fts
+                 JOIN observations o ON o.id = observations_fts.rowid
+                 WHERE observations_fts MATCH ?1
+                 ORDER BY score DESC LIMIT {}",
+                limit * 2
+            )
+        };
+
+        let rows = if let Some(p) = project {
+            self.backend.query(
+                &sql,
+                &[
+                    rusqlite::types::Value::Text(query.to_string()),
+                    rusqlite::types::Value::Text(p.to_string()),
+                ],
+            )?
+        } else {
+            self.backend.query(
+                &sql,
+                &[rusqlite::types::Value::Text(query.to_string())],
+            )?
+        };
+
+        let mut results = Vec::new();
+        for row in &rows {
+            if token_budget <= 0 || results.len() >= limit {
+                break;
+            }
+            let id = get_i64(&row[0]).unwrap_or(0);
+            let title = get_str(&row[1]).unwrap_or("").to_string();
+            let summary = get_str(&row[2]).unwrap_or("").to_string();
+            let content = get_str(&row[3]).unwrap_or("").to_string();
+            let importance = get_f64(&row[4]).unwrap_or(0.0);
+            let token_count = get_i64(&row[5]).unwrap_or(0) as u32;
+            let score = get_f64(&row[6]).unwrap_or(0.0);
+
+            token_budget -= token_count as i64;
+            results.push(json!({
+                "id": id,
+                "title": title,
+                "summary": summary,
+                "content": if content.len() > 200 { format!("{}...", &content[..200]) } else { content },
+                "importance": importance,
+                "token_count": token_count,
+                "score": score,
+            }));
+        }
+
+        Ok(results)
     }
 
     pub fn retain(&self, max_tokens: u64) -> Result<u64, String> {

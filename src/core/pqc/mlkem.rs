@@ -1,5 +1,9 @@
-pub struct KyberKem;
-impl KyberKem {
+/// ML-KEM (FIPS 203) key-encapsulation mechanism (formerly Kyber).
+///
+/// Provides post-quantum secure key encapsulation for establishing
+/// shared secrets between two parties.
+pub struct MlKem;
+impl MlKem {
     pub fn new() -> Self {
         Self
     }

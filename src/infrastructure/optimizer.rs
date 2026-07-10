@@ -15,7 +15,9 @@ pub struct OptimizationStats {
 pub struct AutoOptimizer {
     token_budget: u64,
     min_importance: f32,
+    #[allow(dead_code)]
     target_latency_ms: u64,
+    #[allow(dead_code)]
     stats: OptimizationStats,
 }
 

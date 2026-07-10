@@ -1,4 +1,3 @@
-use serde_json::Value;
 /// Legacy alias
 pub type AntiBrickEngine = AntiBrick;
 pub struct AntiBrickConfig {
@@ -14,6 +13,7 @@ impl Default for AntiBrickConfig {
     }
 }
 pub struct AntiBrick {
+    #[allow(dead_code)]
     enabled: bool,
 }
 impl AntiBrick {

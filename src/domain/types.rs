@@ -1,6 +1,12 @@
+//! Core value types for the Synapsis domain.
+//!
+//! Provides the primitive types used throughout the system:
+//! `ObservationId`, `Timestamp`, `ObservationType`, and `SessionId`.
+
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Unique identifier for an observation in the database.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ObservationId(pub i64);
 impl ObservationId {
@@ -8,6 +14,8 @@ impl ObservationId {
         Self(id)
     }
 }
+
+/// Unix timestamp wrapper for type-safe time handling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Timestamp(pub i64);
 impl Timestamp {
@@ -24,6 +32,7 @@ impl std::fmt::Display for Timestamp {
     }
 }
 
+/// Categorization of an observation's origin or purpose.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ObservationType {
     Note,

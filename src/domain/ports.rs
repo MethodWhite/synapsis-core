@@ -1,4 +1,4 @@
-use crate::domain::entities::{MemoryEntry, SessionInfo};
+use crate::domain::entities::MemoryEntry;
 use crate::domain::types::ObservationId;
 
 /// Low-level storage backend abstraction supporting multiple database engines.
@@ -34,7 +34,6 @@ pub trait MemoryPort: Send + Sync {
     fn stats(&self) -> Result<MemoryStats, String>;
 }
 
-use crate::domain::types::SessionId;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryStats {

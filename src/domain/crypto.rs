@@ -1,4 +1,3 @@
-use serde_json::Value;
 pub trait CryptoProvider: Send + Sync {
     fn encrypt(
         &self,
@@ -32,14 +31,20 @@ impl PqcryptoProvider {
     }
 }
 impl CryptoProvider for PqcryptoProvider {}
+/// Post-quantum cryptographic algorithms supported by Synapsis.
+///
+/// Uses standardized NIST algorithms:
+/// - **ML-KEM** (FIPS 203) — Key-Encapsulation Mechanism, formerly Kyber
+/// - **ML-DSA** (FIPS 204) — Digital Signature Algorithm, formerly Dilithium
+/// - **AES-256-GCM** — Fallback symmetric encryption
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PqcAlgorithm {
-    Kyber512,
-    Kyber768,
-    Kyber1024,
-    Dilithium2,
-    Dilithium3,
-    Dilithium5,
+    MlKem512,
+    MlKem768,
+    MlKem1024,
+    MlDsa2,
+    MlDsa3,
+    MlDsa5,
     Aes256Gcm,
 }
 pub fn hash_password(_password: &str) -> Result<String, String> {

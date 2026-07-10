@@ -1,7 +1,4 @@
-use crate::domain::entities::SessionInfo;
-use crate::domain::types::SessionId;
 use crate::infrastructure::database::Database;
-use serde_json::Value;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 

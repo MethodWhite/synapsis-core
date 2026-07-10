@@ -1,4 +1,3 @@
-use serde_json::Value;
 pub struct FilesystemWatchdog;
 impl FilesystemWatchdog {
     pub fn new(_config: WatchdogConfig) -> Self {
