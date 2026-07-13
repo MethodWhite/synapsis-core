@@ -9,7 +9,7 @@ license = "BUSL-1.1"
 [features]
 default = []
 full = ["postgres"]
-pqc = ["pqcrypto-mlkem", "pqcrypto-mldsa"]
+pqc = ["pqcrypto-mlkem", "pqcrypto-mldsa", "pqcrypto-traits"]
 postgres = ["tokio-postgres", "deadpool-postgres"]
 
 [lib]
@@ -36,3 +36,4 @@ tokio-postgres = { version = "0.7", features = ["with-serde_json-1", "with-chron
 deadpool-postgres = { version = "0.14", optional = true }
 pqcrypto-mlkem = { version = "0.1", optional = true }
 pqcrypto-mldsa = { version = "0.1", optional = true }
+pqcrypto-traits = { version = "0.3", optional = true }
