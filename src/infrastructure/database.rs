@@ -1357,6 +1357,90 @@ impl Database {
         Ok(results)
     }
 
+    pub fn entity_by_name(&self, name: &str) -> Result<Option<Entity>, String> {
+        let rows = self.backend.query(
+            "SELECT id, name, entity_type, aliases, mention_count, first_seen, last_seen
+             FROM entities WHERE name = ?1",
+            &[DbValue::Text(name.to_string())],
+        )?;
+        if rows.is_empty() {
+            return Ok(None);
+        }
+        let row = &rows[0];
+        Ok(Some(Entity {
+            id: get_i64(&row[0]).unwrap_or(0) as u64,
+            name: get_str(&row[1]).unwrap_or("").to_string(),
+            entity_type: parse_entity_type(get_str(&row[2]).unwrap_or("")),
+            aliases: get_str(&row[3]).unwrap_or("").split(',').map(|s| s.to_string()).filter(|s| !s.is_empty()).collect(),
+            embedding: vec![],
+            mention_count: get_i64(&row[4]).unwrap_or(0) as u64,
+            first_seen: crate::domain::types::Timestamp(get_i64(&row[5]).unwrap_or(0)),
+            last_seen: crate::domain::types::Timestamp(get_i64(&row[6]).unwrap_or(0)),
+        }))
+    }
+
+    pub fn entity_relations(&self, entity_id: u64) -> Result<Vec<(crate::domain::entities::Relation, Entity, Entity)>, String> {
+        let rows = self.backend.query(
+            "SELECT r.id, r.source_id, r.target_id, r.relation_type, r.weight, r.observation_id, r.created_at,
+                    e1.id, e1.name, e1.entity_type, e1.aliases, e1.mention_count, e1.first_seen, e1.last_seen,
+                    e2.id, e2.name, e2.entity_type, e2.aliases, e2.mention_count, e2.first_seen, e2.last_seen
+             FROM relations r
+             JOIN entities e1 ON r.source_id = e1.id
+             JOIN entities e2 ON r.target_id = e2.id
+             WHERE r.source_id = ?1 OR r.target_id = ?1",
+            &[DbValue::Integer(entity_id as i64)],
+        )?;
+        let mut results = Vec::new();
+        for row in &rows {
+            results.push((
+                crate::domain::entities::Relation {
+                    id: get_i64(&row[0]).unwrap_or(0) as u64,
+                    source_id: get_i64(&row[1]).unwrap_or(0) as u64,
+                    target_id: get_i64(&row[2]).unwrap_or(0) as u64,
+                    relation_type: parse_relation_type(get_str(&row[3]).unwrap_or("")),
+                    weight: get_f64(&row[4]).unwrap_or(0.0) as f32,
+                    observation_id: get_i64(&row[5]).unwrap_or(0) as u64,
+                    created_at: crate::domain::types::Timestamp(get_i64(&row[6]).unwrap_or(0)),
+                },
+                Entity {
+                    id: get_i64(&row[7]).unwrap_or(0) as u64,
+                    name: get_str(&row[8]).unwrap_or("").to_string(),
+                    entity_type: parse_entity_type(get_str(&row[9]).unwrap_or("")),
+                    aliases: get_str(&row[10]).unwrap_or("").split(',').map(|s| s.to_string()).filter(|s| !s.is_empty()).collect(),
+                    embedding: vec![],
+                    mention_count: get_i64(&row[11]).unwrap_or(0) as u64,
+                    first_seen: crate::domain::types::Timestamp(get_i64(&row[12]).unwrap_or(0)),
+                    last_seen: crate::domain::types::Timestamp(get_i64(&row[13]).unwrap_or(0)),
+                },
+                Entity {
+                    id: get_i64(&row[14]).unwrap_or(0) as u64,
+                    name: get_str(&row[15]).unwrap_or("").to_string(),
+                    entity_type: parse_entity_type(get_str(&row[16]).unwrap_or("")),
+                    aliases: get_str(&row[17]).unwrap_or("").split(',').map(|s| s.to_string()).filter(|s| !s.is_empty()).collect(),
+                    embedding: vec![],
+                    mention_count: get_i64(&row[18]).unwrap_or(0) as u64,
+                    first_seen: crate::domain::types::Timestamp(get_i64(&row[19]).unwrap_or(0)),
+                    last_seen: crate::domain::types::Timestamp(get_i64(&row[20]).unwrap_or(0)),
+                },
+            ));
+        }
+        Ok(results)
+    }
+
+    pub fn entity_observation_ids(&self, entity_id: u64) -> Result<Vec<u64>, String> {
+        let rows = self.backend.query(
+            "SELECT DISTINCT observation_id FROM relations WHERE source_id = ?1 OR target_id = ?1",
+            &[DbValue::Integer(entity_id as i64)],
+        )?;
+        let mut ids = Vec::new();
+        for row in &rows {
+            if let Some(id) = get_i64(&row[0]) {
+                ids.push(id as u64);
+            }
+        }
+        Ok(ids)
+    }
+
     pub fn entity_search(
         &self,
         query: &str,
@@ -1445,7 +1529,7 @@ pub(crate) fn get_i64(v: &DbValue) -> Option<i64> {
     }
 }
 
-pub(crate) fn get_f64(v: &DbValue) -> Option<f64> {
+pub fn get_f64(v: &DbValue) -> Option<f64> {
     match v {
         DbValue::Real(f) => Some(*f),
         DbValue::Integer(i) => Some(*i as f64),

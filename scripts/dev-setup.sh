@@ -10,6 +10,7 @@ CARGO_CONFIG="$CARGO_CONFIG_DIR/config.toml"
 
 SIBLING_REPOS=(
   "rag-core"
+  "rag-graph"
   "prusia-vault"
   "arca"
 )
