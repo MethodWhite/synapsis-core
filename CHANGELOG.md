@@ -5,6 +5,13 @@ All notable changes to Synapsis Core will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0](https://github.com/MethodWhite/synapsis-core/compare/v0.6.0...v0.7.0) (2026-07-14)
+
+
+### Features
+
+* implement real PQC (ML-KEM-1024 + ML-DSA-87) ([6b8885b](https://github.com/MethodWhite/synapsis-core/commit/6b8885bc25f14311fb1bbbc99e57a0c30cf7fd95))
+
 ## [0.6.0](https://github.com/MethodWhite/synapsis-core/compare/v0.5.1...v0.6.0) (2026-07-11)
 
 
