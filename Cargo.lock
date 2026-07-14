@@ -1047,6 +1047,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
+name = "rag-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "rand"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1285,7 +1292,7 @@ dependencies = [
 
 [[package]]
 name = "synapsis-core"
-version = "0.6.0"
+version = "0.8.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -1296,6 +1303,7 @@ dependencies = [
  "futures",
  "hex",
  "prusia-vault",
+ "rag-core",
  "rand 0.8.6",
  "rusqlite",
  "serde",

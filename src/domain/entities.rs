@@ -1,6 +1,8 @@
 use crate::domain::types::{ObservationId, ObservationType, SessionId, Timestamp};
 use serde::{Deserialize, Serialize};
 
+pub use rag_core::{compute_embedding, cosine_similarity, Embedding, EMBEDDING_DIMENSIONS};
+
 /// Token-efficient memory entry with importance scoring and automatic summarization.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Observation {
@@ -565,187 +567,12 @@ pub fn infer_relationships(
 
 // ── Token-efficient helpers ──────────────────────────────────────────
 
-/// Rough token estimation (chars / 4 for English text).
-pub fn estimate_tokens(text: &str) -> usize {
-    (text.len() + 3) / 4
-}
+pub use rag_core::chunking::{estimate_tokens, chunk_text, summarize};
+pub use rag_core::compute_importance;
+pub use rag_core::decay_importance;
 
-/// Create a summary by truncating to `max_tokens`.
-pub fn summarize(title: &str, content: &str, max_tokens: usize) -> String {
-    let full = format!("{}: {}", title, content);
-    let estimated = estimate_tokens(&full);
-    if estimated <= max_tokens {
-        return full;
-    }
 
-    // Truncate: keep title + first N chars of content
-    let title_tokens = estimate_tokens(title);
-    let content_budget = max_tokens.saturating_sub(title_tokens + 2);
-    let content_chars = content_budget * 4;
-    if content_chars < 20 {
-        title.chars().take(80).collect()
-    } else {
-        let truncated: String = content.chars().take(content_chars).collect();
-        format!("{}: {}…", title, truncated)
-    }
-}
 
-/// Compute importance score (0.0-1.0) from content signals.
-pub fn compute_importance(title: &str, content: &str, _tags: &[&str]) -> f32 {
-    let mut score = 0.5;
-    // Longer content tends to be more important
-    let len_score = (content.len() as f32 / 2000.0).min(0.3);
-    score += len_score;
-    // Title with keywords boosts importance
-    let keywords = [
-        "error",
-        "critical",
-        "important",
-        "memory",
-        "learn",
-        "trade",
-        "signal",
-        "alert",
-    ];
-    let kw_score = keywords
-        .iter()
-        .filter(|k| title.to_lowercase().contains(*k))
-        .count() as f32
-        * 0.1;
-    score += kw_score;
-    score.min(1.0)
-}
-
-/// Update importance with recency boost (decay factor).
-pub fn decay_importance(importance: f32, hours_old: f64) -> f32 {
-    importance * (1.0_f32 - (hours_old as f32 * 0.001).min(0.5))
-}
-
-pub type Embedding = Vec<f32>;
-pub const EMBEDDING_DIMENSIONS: usize = 384;
-
-pub fn compute_embedding(text: &str) -> Embedding {
-    const DIM: usize = EMBEDDING_DIMENSIONS;
-    let mut vec = vec![0.0f32; DIM];
-    let text = text.to_lowercase();
-    let chars: Vec<char> = text.chars().collect();
-
-    if chars.len() < 3 {
-        return vec;
-    }
-
-    for i in 0..chars.len() - 2 {
-        let trigram: String = chars[i..i + 3].iter().collect();
-        let hash = fnv1a_hash(&trigram);
-        let dim1 = (hash as usize) % DIM;
-        let dim2 = ((hash >> 8) as usize) % DIM;
-        let dim3 = ((hash >> 16) as usize) % DIM;
-        vec[dim1] += 1.0;
-        vec[dim2] += 1.0;
-        vec[dim3] += 0.5;
-    }
-
-    let norm: f32 = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if norm > 0.0 {
-        for x in &mut vec {
-            *x /= norm;
-        }
-    }
-
-    vec
-}
-
-fn fnv1a_hash(s: &str) -> u64 {
-    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
-    const FNV_PRIME: u64 = 0x100000001b3;
-    let mut hash = FNV_OFFSET;
-    for b in s.bytes() {
-        hash ^= b as u64;
-        hash = hash.wrapping_mul(FNV_PRIME);
-    }
-    hash
-}
-
-pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
-    if a.len() != b.len() || a.is_empty() {
-        return 0.0;
-    }
-    let mut dot = 0.0_f64;
-    let mut norm_a = 0.0_f64;
-    let mut norm_b = 0.0_f64;
-    for i in 0..a.len() {
-        let av = a[i] as f64;
-        let bv = b[i] as f64;
-        dot += av * bv;
-        norm_a += av * av;
-        norm_b += bv * bv;
-    }
-    let denom = norm_a.sqrt() * norm_b.sqrt();
-    if denom == 0.0 {
-        0.0
-    } else {
-        dot / denom
-    }
-}
-
-pub fn chunk_text(text: &str, max_chunk_tokens: usize) -> Vec<(String, String)> {
-    if text.is_empty() {
-        return vec![];
-    }
-    let estimated_tokens = estimate_tokens(text);
-    if estimated_tokens <= max_chunk_tokens {
-        let summary = summarize("chunk", text, 50);
-        return vec![(text.to_string(), summary)];
-    }
-    let mut chunks = Vec::new();
-    let chars: Vec<char> = text.chars().collect();
-    let len = chars.len();
-    let char_budget = max_chunk_tokens * 4;
-    let mut start = 0;
-    while start < len {
-        let mut end = (start + char_budget).min(len);
-        if end < len {
-            let search_start = start.max(end.saturating_sub(40));
-            let mut split_at = end;
-            for i in (search_start..end).rev() {
-                let c = chars[i];
-                if c == '\n' && i + 1 < len && chars[i + 1] == '\n' {
-                    split_at = i + 2;
-                    break;
-                }
-                if (c == '.' || c == '!' || c == '?')
-                    && (i + 1 >= len || chars[i + 1] == ' ' || chars[i + 1] == '\n')
-                {
-                    split_at = i + 1;
-                    break;
-                }
-            }
-            if split_at == end {
-                for i in (search_start..end).rev() {
-                    if chars[i] == '\n' {
-                        split_at = i + 1;
-                        break;
-                    }
-                }
-            }
-            end = split_at;
-            if end <= start {
-                end = (start + char_budget).min(len);
-            }
-        }
-        let chunk_str: String = chars[start..end].iter().collect();
-        if chunk_str.trim().is_empty() {
-            break;
-        }
-        let summary = summarize("chunk", &chunk_str, 50);
-        chunks.push((chunk_str, summary));
-        start = end;
-        while start < len && chars[start].is_whitespace() {
-            start += 1;
-        }
-    }
-    chunks
-}
 
 pub fn compute_chunks(observation: &Observation) -> Vec<Chunk> {
     let segments = chunk_text(&observation.content, 256);
