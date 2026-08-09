@@ -35,5 +35,5 @@ futures = "0.3"
 tokio-postgres = { version = "0.7", features = ["with-serde_json-1", "with-chrono-0_4"], optional = true }
 deadpool-postgres = { version = "0.14", optional = true }
 rag-core = { git = "https://github.com/MethodWhite/rag-core", rev = "56430775d02ed28727c19bdff4b7c19d5992a727" }
-rag-graph = { git = "https://github.com/MethodWhite/rag-graph", branch = "main" }
+rag-graph = { git = "https://github.com/MethodWhite/rag-graph", rev = "4e488a47a5d64f109c88df8002371aa9bb357f4f" }
 prusia-vault = { git = "https://github.com/MethodWhite/prusia-vault", branch = "main", optional = true }
